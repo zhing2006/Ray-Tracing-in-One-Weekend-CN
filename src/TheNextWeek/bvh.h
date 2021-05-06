@@ -35,16 +35,12 @@ class bvh_node : public hittable {
 
         size_t object_span = end - start;
 
-        if (object_span == 1) {
-            left = right = objects[start];
+        if (object_span == 3) {
+            left = std::make_shared<bvh_node>(objects, start, start+2);
+            right = objects[start+2];
         } else if (object_span == 2) {
-            if (comparator(objects[start], objects[start+1])) {
-                left = objects[start];
-                right = objects[start+1];
-            } else {
-                left = objects[start+1];
-                right = objects[start];
-            }
+            left = objects[start];
+            right = objects[start+1];
         } else {
             std::sort(objects.begin() + start, objects.begin() + end, comparator);
 
