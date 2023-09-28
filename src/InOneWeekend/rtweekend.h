@@ -28,6 +28,17 @@ const double pi = 3.1415926535897932385;
 
 // Utility Functions
 
+inline double rmin(double a, double b) {
+    return a <= b ? a : b;
+}
+
+inline double rmax(double a, double b) {
+    return a >= b ? a : b;
+}
+
+#define fmin rmin
+#define fmax rmax
+
 inline double degrees_to_radians(double degrees) {
     return degrees * pi / 180.0;
 }
