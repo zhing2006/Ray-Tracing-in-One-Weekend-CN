@@ -1,0 +1,4017 @@
+<meta charset="utf-8">
+<link rel="icon" type="image/png" href="../favicon.png">
+<!-- Markdeep: https://casual-effects.com/markdeep/ -->
+
+
+
+                                   **一周末光线追踪**
+                   [Peter Shirley][], [Trevor David Black][], [Steve Hollasch][]
+                                                <br>
+                                     Version 4.0.0-alpha.2, 2023-XX-XX
+                                                <br>
+                      Copyright 2018-2023 Peter Shirley. All rights reserved.
+
+
+
+概述
+====================================================================================================
+多年来，我教授了许多计算机图形学课程。通常我会选择使用光线追踪进行教学，因为你需要编写所有的代码，但仍然可以
+不使用API获得酷炫图像。我决定将我的课程笔记改编成一个教程，以便尽快让您编写一个酷炫的程序。这不会是一个功能齐
+全的光线追踪器，但它确实具有间接光照，这使得光线追踪在电影中成为一种常见技术。按照这些步骤进行操作，您所编写的
+光线追踪器的架构将适用于扩展到更复杂的光线追踪器，如果您对此感到兴奋并希望继续追求。
+
+当有人说“光线追踪”时，它可能意味着很多不同的东西。我要描述的是技术上的路径追踪器，而且是一个相当通用的追踪器。
+虽然代码会相当简单（让计算机来完成工作！），但我相信您会对您可以生成的图像非常满意。
+
+我将按照我编写的顺序带您编写一个光线追踪器，并提供一些调试技巧。最后，您将拥有一个能够生成出色图像的光线追踪器。
+您应该能够在一个周末内完成这个任务。如果您花费更长的时间，不要担心。我使用C++作为主要编程语言，但您不需要。
+然而，我建议您使用C++，因为它快速、可移植，并且大多数电影和视频游戏渲染器都是用C++编写的。请注意，我避免使用大
+多数C++的“现代特性”，但是继承和运算符重载对于光线追踪器来说太有用了，所以我不会放弃它们。
+
+> 我不在网上提供代码，但代码是真实存在的，我会展示所有代码，除了`vec3`类中的一些简单操作符。我非常推荐通过输入
+代码来学习它，但当代码可用时，我会使用它，所以只有当代码不可用时，我才会实践我所讲的。所以不要问我要代码！
+
+我保留了最后一部分，因为我做了一个180度的转变，这是很有趣的。一些读者在比较代码时发现了一些微妙的错误。所以请确
+实输入代码，但您可以在[GitHub上的RayTracing项目][repo]中找到每本书的完成源代码。
+
+关于这些书籍的实现代码的说明 - 我们对包含的代码的理念优先考虑以下目标：
+
+  - 代码应该实现书中涵盖的概念。
+
+  - 我们使用C++，但尽可能简单。我们的编程风格非常类似于C语言，但我们利用现代特性使代码更易于使用和理解。
+
+  - 我们的编码风格尽可能与原始书籍保持一致，以保持连贯性。
+
+  - 每行代码的长度保持在96个字符以内，以保持代码库和书籍中的代码清单之间的一致性。
+
+因此，代码提供了一个基本的实现，留下了大量的改进供读者享受。有无数种方法可以优化和现代化代码，但我们优先考虑简
+单的解决方案。
+
+我们假设您对向量（如点积和向量相加）有一些了解。如果您不了解，请进行一些复习。如果您需要复习或首次学习这些内容，
+请查看Morgan McGuire的在线[_Graphics Codex_][gfx-codex]，Steve Marschner和Peter Shirley的
+《计算机图形学基础》或J.D. Foley和Andy Van Dam的《计算机图形学原理与实践》。
+
+Peter在 https://in1weekend.blogspot.com/ 上维护了与本书系列相关的网站，其中包括进一步阅读和资源链接。
+
+这些书籍已经格式化为可以直接从您的浏览器中打印的版本。我们还在[每个发布版本][releases]的“Assets”部分提供了每本
+书的PDF版本。
+
+如果您想与我们交流，请随时发送电子邮件至：
+
+  - Peter Shirley, ptrshrl@gmail.com
+  - Steve Hollasch, steve@hollasch.net
+  - Trevor David Black, trevordblack@trevord.black
+
+最后，如果您在实现过程中遇到问题，有一般性的问题，或者想分享您自己的想法或工作，请参阅GitHub项目中的
+[GitHub讨论论坛][discussions]。
+
+感谢所有在这个项目中帮助过的人。您可以在本书末尾的致谢部分找到他们。
+
+让我们开始吧！
+
+
+
+输出图像
+====================================================================================================
+
+PPM图像格式
+---------------------
+每当您启动渲染器时，您都需要一种查看图像的方式。最直接的方法是将其写入文件。问题是，有很多格式可供选择。其中许
+多是复杂的。我总是从一个纯文本的ppm文件开始。这是维基百科上的一个很好的描述：
+
+  ![Figure [ppm]: PPM Example](../images/fig-1.01-ppm.jpg)
+
+<div class='together'>
+让我们编写一些C++代码来输出这样的图像：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include <iostream>
+
+    int main() {
+
+        // Image
+
+        int image_width = 256;
+        int image_height = 256;
+
+        // Render
+
+        std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+
+        for (int j = 0; j < image_height; j++) {
+            for (int i = 0; i < image_width; i++) {
+                auto r = double(i) / (image_width-1);
+                auto g = double(j) / (image_height-1);
+                auto b = 0.0;
+
+                int ir = int(255.999 * r);
+                int ig = int(255.999 * g);
+                int ib = int(255.999 * b);
+
+                std::cout << ir << ' ' << ig << ' ' << ib << '\n';
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-initial]: <kbd>[main.cc]</kbd> 创建你的第一张图像]
+
+</div>
+
+在这段代码中有一些需要注意的地方：
+
+  1. 像素按行写出。
+
+  2. 每一行的像素从左到右写出。
+
+  3. 这些行从上到下写出。
+
+  4. 按照惯例，每个红/绿/蓝分量在内部由取值范围为0.0到1.0的实值变量表示。在打印输出之前，必须将它们缩放为
+     0到255之间的整数值。
+
+  5. 红色从完全关闭（黑色）到完全打开（亮红色）从左到右变化，绿色从顶部完全关闭（黑色）到底部完全打开（亮绿色）
+     变化。将红光和绿光相加会得到黄色，所以我们应该期望右下角是黄色的。
+
+
+创建图像文件
+-----------------------
+由于文件是写入标准输出流的，您需要将其重定向到图像文件中。通常，可以通过使用`>`重定向操作符从命令行执行此操作。
+
+在Windows上，您可以通过以下命令获取CMake的调试构建：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    cmake -B build
+    cmake --build build
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+然后像这样运行您新构建的程序：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    build\Debug\inOneWeekend.exe > image.ppm
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+稍后，为了提高速度，最好运行优化构建。在这种情况下，您可以这样构建：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    cmake --build build --config release
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+并像这样运行优化程序：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    build\Release\inOneWeekend.exe > image.ppm
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+上述示例假设您正在使用与所包含源代码中的`CMakeLists.txt`文件相同的方法使用CMake进行构建。使用您最熟悉的构建
+环境（和语言）即可。
+
+在Mac或Linux上，进行发布构建，您可以像这样启动程序：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    build/inOneWeekend > image.ppm
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+打开输出文件（在我的Mac上使用`ToyViewer`，但如果您的查看器不支持它，请尝试在您喜欢的图像查看器中打开，并在
+Google中搜索“ppm查看器”）会显示以下结果：
+
+  ![<span class='num'>图像 1：</span>第一个PPM图像
+  ](../images/img-1.01-first-ppm-image.png class='pixel')
+
+太棒了！这是计算机图形学中的“Hello World”。如果您的图像看起来不像这样，请在文本编辑器中打开输出文件并查看其内
+容。它应该以类似以下的方式开始：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    P3
+    256 256
+    255
+    0 0 0
+    1 0 0
+    2 0 0
+    3 0 0
+    4 0 0
+    5 0 0
+    6 0 0
+    7 0 0
+    8 0 0
+    9 0 0
+    10 0 0
+    11 0 0
+    12 0 0
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [first-img]: 第一张图像输出]
+
+如果您的PPM文件不像这样，那么请仔细检查您的格式化代码。如果它确实看起来像这样但无法渲染，则可能存在换行符差异
+或类似的问题，这可能会使您的图像查看器混淆。为了帮助调试此问题，您可以在Github项目的`images`目录中找到一个名
+为`test.ppm`的文件。这应该有助于确保您的查看器可以处理PPM格式，并将其与您生成的PPM文件进行比较。
+
+一些读者报告称在Windows上查看生成的文件时遇到了问题。在这种情况下，问题通常是PPM以UTF-16的形式写出的，通常是
+从PowerShell中进行的。如果遇到此问题，请参阅[Discussion 1114](https://github.com/RayTracing/raytracing.github.io/discussions/1114)以获取有关此问题的帮助。
+
+如果一切显示正确，那么您基本上已经解决了系统和IDE问题 - 在本系列的其余部分中，所有内容都使用相同的简单机制生
+成渲染图像。
+
+如果您想生成其他图像格式，我推荐使用`stb_image.h`，这是一个仅包含头文件的图像库，可以在GitHub上找到，网址为
+https://github.com/nothings/stb。
+
+
+添加进度指示器
+----------------------------
+在继续之前，让我们为输出添加一个进度指示器。这是一种方便的方式来跟踪长时间渲染的进度，也可以可能识别由于无限
+循环或其他问题而停滞的运行。
+
+<div class='together'>
+我们的程序将图像输出到标准输出流（`std::cout`），保持不变，但是将其它信息写入日志输出流（`std::clog`）：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        for (int j = 0; j < image_height; ++j) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            for (int i = 0; i < image_width; i++) {
+                auto r = double(i) / (image_width-1);
+                auto g = double(j) / (image_height-1);
+                auto b = 0.0;
+
+                int ir = int(255.999 * r);
+                int ig = int(255.999 * g);
+                int ib = int(255.999 * b);
+
+                std::cout << ir << ' ' << ig << ' ' << ib << '\n';
+            }
+        }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        std::clog << "\rDone.                 \n";
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-progress]: <kbd>[main.cc]</kbd> 主渲染循环与进度报告]
+
+</div>
+
+现在运行，您将看到剩余扫描线数量的实时计数。希望它运行得如此之快，以至于您甚至看不到它！不用担心 - 在未来，
+随着我们扩展光线追踪器，您将有足够的时间观察一个缓慢更新的进度条。
+
+
+vec3类
+====================================================================================================
+几乎所有的图形程序都有用于存储几何向量和颜色的类。在许多系统中，这些向量是4D的（3D位置加上用于几何的齐次坐标，
+或者RGB加上透明度通道用于颜色）。对于我们的目的，三个坐标就足够了。我们将使用相同的`vec3`类来表示颜色、位置、
+方向、偏移量等等。有些人不喜欢这样做，因为它不能阻止您做一些愚蠢的事情，比如从颜色中减去一个位置。他们有一定道
+理，但是不是明显错误时，我们总是采取“代码更少”的路线。尽管如此，我们确实为`vec3`声明了两个别名：`point3`和`color`。
+由于这两种类型只是`vec3`的别名，如果您将一个`color`传递给一个期望`point3`的函数，您不会收到警告，而且没有任
+何限制阻止您将`point3`添加到`color`中，但这使得代码稍微容易阅读和理解。
+
+我们在一个新的`vec3.h`头文件的上半部分定义了`vec3`类，并在下半部分定义了一组有用的向量工具函数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef VEC3_H
+    #define VEC3_H
+
+    #include <cmath>
+    #include <iostream>
+
+    using std::sqrt;
+
+    class vec3 {
+      public:
+        double e[3];
+
+        vec3() : e{0,0,0} {}
+        vec3(double e0, double e1, double e2) : e{e0, e1, e2} {}
+
+        double x() const { return e[0]; }
+        double y() const { return e[1]; }
+        double z() const { return e[2]; }
+
+        vec3 operator-() const { return vec3(-e[0], -e[1], -e[2]); }
+        double operator[](int i) const { return e[i]; }
+        double& operator[](int i) { return e[i]; }
+
+        vec3& operator+=(const vec3& v) {
+            e[0] += v.e[0];
+            e[1] += v.e[1];
+            e[2] += v.e[2];
+            return *this;
+        }
+
+        vec3& operator*=(double t) {
+            e[0] *= t;
+            e[1] *= t;
+            e[2] *= t;
+            return *this;
+        }
+
+        vec3& operator/=(double t) {
+            return *this *= 1/t;
+        }
+
+        double length() const {
+            return sqrt(length_squared());
+        }
+
+        double length_squared() const {
+            return e[0]*e[0] + e[1]*e[1] + e[2]*e[2];
+        }
+    };
+
+    // point3只是vec3的别名，但在代码中用于几何清晰度。
+    using point3 = vec3;
+
+
+    // 向量实用函数
+
+    inline std::ostream& operator<<(std::ostream& out, const vec3& v) {
+        return out << v.e[0] << ' ' << v.e[1] << ' ' << v.e[2];
+    }
+
+    inline vec3 operator+(const vec3& u, const vec3& v) {
+        return vec3(u.e[0] + v.e[0], u.e[1] + v.e[1], u.e[2] + v.e[2]);
+    }
+
+    inline vec3 operator-(const vec3& u, const vec3& v) {
+        return vec3(u.e[0] - v.e[0], u.e[1] - v.e[1], u.e[2] - v.e[2]);
+    }
+
+    inline vec3 operator*(const vec3& u, const vec3& v) {
+        return vec3(u.e[0] * v.e[0], u.e[1] * v.e[1], u.e[2] * v.e[2]);
+    }
+
+    inline vec3 operator*(double t, const vec3& v) {
+        return vec3(t*v.e[0], t*v.e[1], t*v.e[2]);
+    }
+
+    inline vec3 operator*(const vec3& v, double t) {
+        return t * v;
+    }
+
+    inline vec3 operator/(const vec3& v, double t) {
+        return (1/t) * v;
+    }
+
+    inline double dot(const vec3& u, const vec3& v) {
+        return u.e[0] * v.e[0]
+             + u.e[1] * v.e[1]
+             + u.e[2] * v.e[2];
+    }
+
+    inline vec3 cross(const vec3& u, const vec3& v) {
+        return vec3(u.e[1] * v.e[2] - u.e[2] * v.e[1],
+                    u.e[2] * v.e[0] - u.e[0] * v.e[2],
+                    u.e[0] * v.e[1] - u.e[1] * v.e[0]);
+    }
+
+    inline vec3 unit_vector(const vec3& v) {
+        return v / v.length();
+    }
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [vec3-class]: <kbd>[vec3.h]</kbd> vec3 定义和辅助函数]
+
+我们在这里使用`double`，但有些光线追踪器使用`float`。`double`具有更高的精度和范围，但是与`float`相比，它的
+大小是两倍。如果您在有限的内存条件下进行编程（例如硬件着色器），这种大小的增加可能很重要。任何一种都可以 -
+按照自己的喜好选择。
+
+
+颜色实用函数
+------------------------
+使用我们的新`vec3`类，我们将创建一个新的`color.h`头文件，并定义一个实用函数，将单个像素的颜色写入标准输出流。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef COLOR_H
+    #define COLOR_H
+
+    #include "vec3.h"
+
+    #include <iostream>
+
+    using color = vec3;
+
+    void write_color(std::ostream& out, const color& pixel_color) {
+        // 将每个颜色分量的转换后的[0,255]值写入输出流
+        out << int(255.999 * pixel_color.x()) << ' '
+            << int(255.999 * pixel_color.y()) << ' '
+            << int(255.999 * pixel_color.z()) << '\n';
+    }
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [color]: <kbd>[color.h]</kbd> color 实用函数]
+
+<div class='together'>
+现在我们可以修改主函数来使用这两个函数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "color.h"
+    #include "vec3.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    #include <iostream>
+
+    int main() {
+
+        // Image
+
+        int image_width = 256;
+        int image_height = 256;
+
+        // Render
+
+        std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+
+        for (int j = 0; j < image_height; j++) {
+            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+            for (int i = 0; i < image_width; i++) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                auto pixel_color = color(double(i)/(image_width-1), double(j)/(image_height-1), 0);
+                write_color(std::cout, pixel_color);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            }
+        }
+
+        std::clog << "\rDone.                 \n";
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ppm-2]: <kbd>[main.cc]</kbd> 第一个PPM图像的最终代码]
+
+</div>
+
+你应该得到与之前完全相同的图片。
+
+
+
+光线、简单相机和背景
+====================================================================================================
+
+光线类
+--------------
+所有光线追踪器都具有一个光线类和一个计算沿光线看到的颜色的过程。让我们将光线看作一个函数
+$\mathbf{P}(t) = \mathbf{A} + t \mathbf{b}$。这里，$\mathbf{P}$是在三维空间中沿着一条线的三维位置。
+$\mathbf{A}$是光线的起点，$\mathbf{b}$是光线的方向。光线参数$t$是一个实数（在代码中是`double`类型）。
+通过插入不同的$t$值，$\mathbf{P}(t)$沿着光线移动。添加负的$t$值，可以在三维线上的任意位置。对于正的$t$值，
+你只能得到$\mathbf{A}$前面的部分，这通常被称为半线或光线。
+
+  ![Figure [lerp]: 线性插值](../images/fig-1.02-lerp.jpg)
+
+<div class='together'>
+我们可以将光线的概念表示为一个类，并将函数$\mathbf{P}(t)$表示为我们将称之为`ray::at(t)`的函数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef RAY_H
+    #define RAY_H
+
+    #include "vec3.h"
+
+    class ray {
+      public:
+        ray() {}
+
+        ray(const point3& origin, const vec3& direction) : orig(origin), dir(direction) {}
+
+        const point3& origin() const  { return orig; }
+        const vec3& direction() const { return dir; }
+
+        point3 at(double t) const {
+            return orig + t*dir;
+        }
+
+      private:
+        point3 orig;
+        vec3 dir;
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-initial]: <kbd>[ray.h]</kbd> 光线类]
+
+</div>
+
+（对于不熟悉C++的人来说，函数`ray::origin()`和`ray::direction()`都返回对其成员的不可变引用。调用者可以直接
+使用引用，也可以根据需要进行可变副本的创建。）
+
+
+发送光线到场景中
+----------------------------
+现在我们准备转向并制作一个光线追踪器。在核心部分，光线追踪器通过像素发送光线，并计算在这些光线方向上看到的颜色。
+涉及的步骤有：
+
+    1. 计算从“眼睛”通过像素的光线，
+    2. 确定光线与哪些对象相交，以及
+    3. 计算最近相交点的颜色。
+
+在首次开发光线追踪器时，我总是使用简单的相机来让代码运行起来。
+
+我经常在调试时使用正方形图像而陷入麻烦，因为我经常转置$x$和$y$，所以我们将使用非正方形图像。正方形图像具有1比1
+的长宽比，因为它的宽度与高度相同。由于我们想要一个非正方形图像，我们选择16比9，因为它非常常见。16比9的长宽比意
+味着图像宽度与图像高度的比率是16比9。换句话说，给定一个长宽比为16比9的图像，
+
+  $$\text{宽度} / \text{高度} = 16 / 9 = 1.7778$$
+
+作为一个实际的例子，一个宽度为800像素，高度为400像素的图像具有2比1的长宽比。
+
+图像的长宽比可以通过其高度与宽度的比率来确定。然而，由于我们有一个给定的长宽比，所以更容易设置图像的宽度和长宽比，
+然后使用此来计算其高度。这样，我们可以通过改变图像的宽度来放大或缩小图像，而不会影响我们期望的长宽比。我们必须确
+保当我们解出图像高度时，所得到的高度至少为1。
+
+除了为渲染图像设置像素尺寸之外，我们还需要设置一个虚拟的“视口”，用于通过我们的场景光线。视口是三维世界中的虚拟矩
+形，包含图像像素位置的网格。如果像素在水平和垂直方向上的间距相等，包围它们的视口将具有与渲染图像相同的长宽比。两
+个相邻像素之间的距离称为像素间距，正方形像素是标准。
+
+为了开始，我们将选择一个任意的视口高度为2.0，并根据所需的长宽比来缩放视口宽度。以下是此代码的摘录：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    auto aspect_ratio = 16.0 / 9.0;
+    int image_width = 400;
+
+    // 计算图像高度，并确保至少为1。
+    int image_height = int(image_width / aspect_ratio);
+    image_height = (image_height < 1) ? 1 : image_height;
+
+    // 视口宽度小于1是可以的，因为它们是实值。
+    auto viewport_height = 2.0;
+    auto viewport_width = viewport_height * (double(image_width)/image_height);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [image-setup]: 渲染设置]
+
+如果您想知道为什么在计算`viewport_width`时我们不只使用`aspect_ratio`，那是因为设置给`aspect_ratio`的值是理
+想比例，它可能不是`image_width`和`image_height`之间的_实际_比例。如果`image_height`允许是实值（而不仅仅是
+整数），那么使用`aspect_ratio`就没问题。但是`image_width`和`image_height`之间的_实际_比例可以根据代码的两个
+部分而变化。首先，`image_height`向下取整到最近的整数，这可能增加比例。其次，我们不允许`image_height`小于1，
+这也可以改变实际的长宽比。
+
+请注意，`aspect_ratio`是一个理想的比例，我们尽可能使用基于整数的图像宽度与图像高度的比例来近似。为了使我们的
+视口比例与图像比例完全匹配，我们使用计算得到的图像长宽比来确定最终的视口宽度。
+
+接下来，我们将定义相机中心：一个在三维空间中的点，所有场景光线将从该点发出（这通常也称为_视点_）。从相机中心到
+视口中心的向量将与视口正交。我们将首先将视口与相机中心点之间的距离设置为一个单位。这个距离通常被称为_焦距_。
+
+为了简单起见，我们将从相机中心点$(0,0,0)$开始。我们还将y轴向上，x轴向右，负z轴指向观察方向。（这通常被称为_右
+手坐标系_。）
+
+  ![Figure [camera-geom]: 相机几何特征](../images/fig-1.03-cam-geom.jpg)
+
+现在是不可避免的棘手部分。虽然我们的3D空间具有上述约定，但这与我们的图像坐标冲突，我们希望将第一个像素放在左上
+角，并逐渐向右下角移动到最后一个像素。这意味着我们的图像坐标Y轴是反转的：Y增加时向下移动图像。
+
+在扫描图像时，我们将从左上角像素（像素$0,0$）开始，从左到右扫描每一行，然后逐行从上到下扫描。为了帮助导航像素网
+格，我们将使用从左边缘到右边缘的向量（$\mathbf{V_u}$），以及从上边缘到下边缘的向量（$\mathbf{V_v}$）。
+
+我们的像素网格将从视口边缘向内缩进半个像素间距。这样，我们的视口区域被均匀地分成宽度×高度相同的区域。以下是我们
+的视口和像素网格的样子：
+
+  ![Figure [pixel-grid]: 视口和像素网格](../images/fig-1.04-pixel-grid.jpg)
+
+在这个图中，我们有视口、分辨率为7×5的像素网格、视口左上角$\mathbf{Q}$、像素$\mathbf{P_{0,0}}$的位置、视口向量
+$\mathbf{V_u}$（`viewport_u`）、视口向量$\mathbf{V_v}$（`viewport_v`）以及像素增量向量$\mathbf{\Delta u}$
+和$\mathbf{\Delta v}$。
+
+<div class='together'>
+根据上述所有内容，这是实现相机的代码。我们将插入一个名为ray_color(const ray& r)的函数，该函数返回给定场景光线
+的颜色 - 目前我们将始终返回黑色。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "color.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "ray.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "vec3.h"
+
+    #include <iostream>
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    color ray_color(const ray& r) {
+        return color(0,0,0);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    int main() {
+
+        // Image
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto aspect_ratio = 16.0 / 9.0;
+        int image_width = 400;
+
+        // 计算图像高度，并确保至少为1。
+        int image_height = int(image_width / aspect_ratio);
+        image_height = (image_height < 1) ? 1 : image_height;
+
+        // Camera
+
+        auto focal_length = 1.0;
+        auto viewport_height = 2.0;
+        auto viewport_width = viewport_height * (double(image_width)/image_height);
+        auto camera_center = point3(0, 0, 0);
+
+        // 计算水平和垂直视口边缘上的向量。
+        auto viewport_u = vec3(viewport_width, 0, 0);
+        auto viewport_v = vec3(0, -viewport_height, 0);
+
+        // 计算从像素到像素的水平和垂直增量向量。
+        auto pixel_delta_u = viewport_u / image_width;
+        auto pixel_delta_v = viewport_v / image_height;
+
+        // 计算左上角像素的位置。
+        auto viewport_upper_left = camera_center
+                                 - vec3(0, 0, focal_length) - viewport_u/2 - viewport_v/2;
+        auto pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        // Render
+
+        std::cout << "P3\n" << image_width << " " << image_height << "\n255\n";
+
+        for (int j = 0; j < image_height; j++) {
+            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+            for (int i = 0; i < image_width; i++) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
+                auto ray_direction = pixel_center - camera_center;
+                ray r(camera_center, ray_direction);
+
+                color pixel_color = ray_color(r);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                write_color(std::cout, pixel_color);
+            }
+        }
+
+        std::clog << "\rDone.                 \n";
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [creating-rays]: <kbd>[main.cc]</kbd> 创建场景光线]
+
+</div>
+
+在上面的代码中，请注意，我没有将`ray_direction`设置为单位向量，因为我认为这样做可以使代码更简单且稍微更快。
+
+现在我们将填写`ray_color(ray)`函数来实现一个简单的渐变效果。该函数将根据将射线方向缩放为单位长度后的$y$坐标
+的高度（因此$-1.0 < y < 1.0$）线性混合白色和蓝色。因为我们在规范化向量后查看$y$高度，所以除了垂直渐变外，您
+还会注意到水平渐变的颜色。
+
+我将使用标准的图形技巧来线性缩放$0.0 ≤ a ≤ 1.0$。当$a = 1.0$时，我想要蓝色。当$a = 0.0$时，我想要白色。在
+两者之间，我想要一种混合色。这形成了“线性混合”或“线性插值”。这通常被称为两个值之间的_lerp_。Lerp的形式始终为
+
+  $$ \mathit{blendedValue} = (1-a)\cdot\mathit{startValue} + a\cdot\mathit{endValue}, $$
+
+其中$a$从零到一变化。
+
+<div class='together'>
+将所有内容放在一起，我们得到以下结果：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "color.h"
+    #include "ray.h"
+    #include "vec3.h"
+
+    #include <iostream>
+
+
+    color ray_color(const ray& r) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        vec3 unit_direction = unit_vector(r.direction());
+        auto a = 0.5*(unit_direction.y() + 1.0);
+        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    }
+
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-blue-white-blend]: <kbd>[main.cc]</kbd> 渲染一个蓝白渐变]
+
+</div>
+
+<div class='together'>
+在我们的例子中，这将产生：
+
+  ![<span class='num'>Image 2:</span> 根据射线的Y坐标产生蓝白渐变
+  ](../images/img-1.02-blue-to-white.png class='pixel')
+
+</div>
+
+
+
+添加一个球体
+====================================================================================================
+让我们向光线追踪器添加一个对象。人们通常在光线追踪器中使用球体，因为计算射线是否击中球体相对简单。
+
+射线-球体相交
+------------------------
+球体的半径为$r$，位于原点的方程是一个重要的数学方程：
+
+    $$ x^2 + y^2 + z^2 = r^2 $$
+
+你也可以将其理解为，如果给定的点$(x,y,z)$位于球体的表面上，则$x^2 + y^2 + z^2 = r^2$。如果给定的点$(x,y,z)$
+在球体内部，则$x^2 + y^2 + z^2 < r^2$，如果给定的点$(x,y,z)$在球体外部，则$x^2 + y^2 + z^2 > r^2$。
+
+如果我们希望允许球体的中心在任意点$(C_x, C_y, C_z)$，那么方程会变得不那么简单：
+
+  $$ (C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2 = r^2 $$
+
+在图形学中，你几乎总是希望使用向量表示公式，以便所有的$x$/$y$/$z$等可以简单地使用`vec3`类来表示。你可能注意到，
+从点$\mathbf{P} = (x,y,z)$到中心$\mathbf{C} = (C_x, C_y, C_z)$的向量是$(\mathbf{C} - \mathbf{P})$。
+
+如果我们使用点积的定义：
+
+  $$ (\mathbf{C} - \mathbf{P}) \cdot (\mathbf{C} - \mathbf{P})
+     = (C_x - x)^2 + (C_y - y)^2 + (C_z - z)^2
+  $$
+
+那么我们可以将球体的方程用向量形式表示：
+
+  $$ (\mathbf{C} - \mathbf{P}) \cdot (\mathbf{C} - \mathbf{P}) = r^2 $$
+
+我们可以理解为“满足这个方程的任何点$\mathbf{P}$都在球体上”。我们想知道我们的射线
+$\mathbf{P}(t) = \mathbf{Q} + t\mathbf{d}$是否击中了球体的任何地方。如果它确实击中了球体，那么存在某个$t$使
+得$\mathbf{P}(t)$满足球体方程。因此，我们要寻找任何使得下面等式成立的$t$：
+
+  $$ (\mathbf{C} - \mathbf{P}(t)) \cdot (\mathbf{C} - \mathbf{P}(t)) = r^2 $$
+
+可以通过用其展开形式替换$\mathbf{P}(t)$来找到它：
+
+  $$ (\mathbf{C} - (\mathbf{Q} + t \mathbf{d}))
+      \cdot (\mathbf{C} - (\mathbf{Q} + t \mathbf{d})) = r^2 $$
+
+左侧有三个向量与右侧的三个向量进行点乘。如果我们解出完整的点积，我们会得到九个向量。你肯定可以逐个写出所有的内容，
+但我们不需要那么努力。如果你记得，我们想解出$t$，所以我们将根据是否存在$t$来分离项：
+
+  $$ (-t \mathbf{d} + (\mathbf{C} - \mathbf{Q})) \cdot (-t \mathbf{d} + (\mathbf{C} - \mathbf{Q}))
+     = r^2
+  $$
+
+现在，按照向量代数的规则展开点积：
+
+  $$ t^2 \mathbf{d} \cdot \mathbf{d}
+     - 2t \mathbf{d} \cdot (\mathbf{C} - \mathbf{Q})
+     + (\mathbf{C} - \mathbf{Q}) \cdot (\mathbf{C} - \mathbf{Q}) = r^2
+  $$
+
+将半径的平方移到左边：
+
+  $$ t^2 \mathbf{d} \cdot \mathbf{d}
+     - 2t \mathbf{d} \cdot (\mathbf{C} - \mathbf{Q})
+     + (\mathbf{C} - \mathbf{Q}) \cdot (\mathbf{C} - \mathbf{Q}) - r^2 = 0
+  $$
+
+很难看出这个方程到底是什么，但是方程中的向量和$r$都是常量且已知的。此外，我们所拥有的向量都通过点积减少到标量。唯
+一的未知量是$t$，而且我们有一个$t^2$，这意味着这个方程是二次的。你可以通过使用二次方程公式求解二次方程$ax^2 + bx + c = 0$：
+
+  $$ \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} $$
+
+因此，在射线-球体相交方程中解出$t$给出了这些$a$、$b$和$c$的值：
+
+  $$ a = \mathbf{d} \cdot \mathbf{d} $$
+  $$ b = -2 \mathbf{d} \cdot (\mathbf{C} - \mathbf{Q}) $$
+  $$ c = (\mathbf{C} - \mathbf{Q}) \cdot (\mathbf{C} - \mathbf{Q}) - r^2 $$
+
+使用以上所有信息，可以解出$t$，但是有一个平方根部分可能是正数（意味着两个实数解）、负数（意味着没有实数解）或零
+（意味着一个实数解）。在图形学中，代数学几乎总是与几何学直接相关。我们现在得到的是：
+```
+
+  ![Figure [ray-sphere]: 射线-球体相交结果](../images/fig-1.05-ray-sphere.jpg)
+
+
+创建我们的第一个光线追踪图像
+-----------------------------------
+如果我们将这个数学公式硬编码到我们的程序中，我们可以通过在z轴上放置一个小球，并将与之相交的像素颜色设置为红色来
+测试我们的代码。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    bool hit_sphere(const point3& center, double radius, const ray& r) {
+        vec3 oc = center - r.origin();
+        auto a = dot(r.direction(), r.direction());
+        auto b = -2.0 * dot(r.direction(), oc);
+        auto c = dot(oc, oc) - radius*radius;
+        auto discriminant = b*b - 4*a*c;
+        return (discriminant >= 0);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    color ray_color(const ray& r) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        if (hit_sphere(point3(0,0,-1), 0.5, r))
+            return color(1, 0, 0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        vec3 unit_direction = unit_vector(r.direction());
+        auto a = 0.5*(unit_direction.y() + 1.0);
+        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-red-sphere]: <kbd>[main.cc]</kbd> 渲染一个红球]
+
+<div class='together'>
+我们得到的结果如下所示：
+
+  ![<span class='num'>Image 3:</span> 一个简单的红球
+  ](../images/img-1.03-red-sphere.png class='pixel')
+
+</div>
+
+现在这还缺少了很多东西 - 比如阴影、反射光线和多个物体 - 但我们离完成还比离开始更近了！需要注意的一点是，我们
+通过解二次方程并查看是否存在解来测试射线是否与球体相交，但具有负值$t$的解也是可以的。如果将球体的中心更改为
+$z=+1$，您将得到完全相同的图片，因为这个解决方案无法区分相机前面的物体和相机后面的物体。这不是一个功能！我们
+将在下一步解决这些问题。
+
+
+
+表面法线和多个物体
+====================================================================================================
+
+使用表面法线进行着色
+-----------------------------
+首先，让我们得到一个表面法线，这样我们就可以进行着色。表面法线是垂直于相交点处表面的向量。
+
+对于我们的代码，我们需要做一个关键的设计决策：法线向量是否具有任意长度，还是归一化为单位长度。
+
+在归一化向量时，很容易跳过昂贵的平方根运算，以防不需要归一化。然而，在实践中，有三个重要的观察结果。首先，如果
+在任何地方需要一个单位长度的法线向量，那么最好一次性在前面做好，而不是为了每个需要单位长度的位置都一遍又一遍地
+进行归一化。其次，在几个地方我们确实需要单位长度的法线向量。第三，如果要求法线向量为单位长度，那么通常可以通过
+了解特定几何类的构造函数或`hit()`函数来高效地生成该向量。例如，球体法线可以通过除以球体半径而不需要平方根来得
+到单位长度。
+
+鉴于所有这些，我们将采用所有法线向量都是单位长度的策略。
+
+对于一个球体，外法线的方向是击中点减去球心的方向：
+
+  ![Figure [sphere-normal]: 球体表面法线的几何特征](../images/fig-1.06-sphere-normal.jpg)
+
+  在球体上，这意味着从球体中心指向您的向量是直立的。现在让我们将其添加到代码中，并进行着色。我们还没有任何光
+  源等等，所以让我们用一个颜色映射来可视化法线。常用的用于可视化法线的技巧（因为假设$\mathbf{n}$是单位长度向
+  量很容易且直观，因此每个分量的取值范围在-1到1之间）是将每个分量映射到0到1的区间，然后将$(x, y, z)$映射到
+  $(\mathit{red}, \mathit{green}, \mathit{blue})$。对于法线，我们需要的是击中点，而不仅仅是我们是否击中
+  （这是我们目前正在计算的）。场景中只有一个球体，而且它正好在相机前面，所以我们暂时不用担心$t$的负值。我们只
+  需要假设最近的击中点（最小的$t$）就是我们想要的。代码中的这些更改使我们能够计算和可视化$\mathbf{n}$：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    double hit_sphere(const point3& center, double radius, const ray& r) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        vec3 oc = center - r.origin();
+        auto a = dot(r.direction(), r.direction());
+        auto b = -2.0 * dot(r.direction(), oc);
+        auto c = dot(oc, oc) - radius*radius;
+        auto discriminant = b*b - 4*a*c;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        if (discriminant < 0) {
+            return -1.0;
+        } else {
+            return (-b - sqrt(discriminant) ) / (2.0*a);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    }
+
+    color ray_color(const ray& r) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto t = hit_sphere(point3(0,0,-1), 0.5, r);
+        if (t > 0.0) {
+            vec3 N = unit_vector(r.at(t) - vec3(0,0,-1));
+            return 0.5*color(N.x()+1, N.y()+1, N.z()+1);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        vec3 unit_direction = unit_vector(r.direction());
+        auto a = 0.5*(unit_direction.y() + 1.0);
+        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [render-surface-normal]: <kbd>[main.cc]</kbd> 在球体上渲染表面法线]
+
+<div class='together'>
+这样就得到了这张图片：
+
+  ![<span class='num'>Image 4:</span> 根据其法线向量着色的球体
+  ](../images/img-1.04-normals-sphere.png class='pixel')
+
+</div>
+
+
+简化射线与球体相交代码
+---------------------------------------------
+让我们重新审视一下射线与球体相交的函数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    double hit_sphere(const point3& center, double radius, const ray& r) {
+        vec3 oc = center - r.origin();
+        auto a = dot(r.direction(), r.direction());
+        auto b = -2.0 * dot(r.direction(), oc);
+        auto c = dot(oc, oc) - radius*radius;
+        auto discriminant = b*b - 4*a*c;
+
+        if (discriminant < 0) {
+            return -1.0;
+        } else {
+            return (-b - sqrt(discriminant) ) / (2.0*a);
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-sphere-before]: <kbd>[main.cc]</kbd> 射线与球体相交代码（之前）]
+
+首先，回想一下向量与自身的点积等于该向量的平方长度。
+
+其次，注意到`b`的方程中有一个因子为负二。考虑一下如果$b = -2h$时二次方程会发生什么情况：
+
+  $$ \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} $$
+
+  $$ = \frac{-(-2h) \pm \sqrt{(-2h)^2 - 4ac}}{2a} $$
+
+  $$ = \frac{2h \pm 2\sqrt{h^2 - ac}}{2a} $$
+
+  $$ = \frac{h \pm \sqrt{h^2 - ac}}{a} $$
+
+这样简化得很好，所以我们将使用它。因此，解出$h$：
+
+  $$ b = -2 \mathbf{d} \cdot (\mathbf{C} - \mathbf{Q}) $$
+  $$ b = -2h $$
+  $$ h = \frac{b}{-2} = \mathbf{d} \cdot (\mathbf{C} - \mathbf{Q}) $$
+
+<div class='together'>
+使用这些观察，我们现在可以将球体相交代码简化为：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    double hit_sphere(const point3& center, double radius, const ray& r) {
+        vec3 oc = center - r.origin();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto a = r.direction().length_squared();
+        auto h = dot(r.direction(), oc);
+        auto c = oc.length_squared() - radius*radius;
+        auto discriminant = h*h - a*c;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        if (discriminant < 0) {
+            return -1.0;
+        } else {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            return (h - sqrt(discriminant)) / a;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-sphere-after]: <kbd>[main.cc]</kbd> 射线与球体相交代码（之后）]
+
+</div>
+
+一个可命中物体的抽象类
+------------------------------------
+现在，多个球体怎么办？虽然使用球体数组是一个诱人的选择，但一个非常简洁的解决方案是为射线可能命中的任何物体创建
+一个“抽象类”，并将球体和球体列表变成可以被命中的东西。关于该类应该被称为什么，这是一个难题 - 如果不考虑“面向对
+象”编程，“对象”是一个不错的选择。通常使用“表面”这个词，但它的弱点是我们可能会想要处理体积（雾、云等）。 “可命
+中”强调了将它们统一起来的成员函数。我并不喜欢其中任何一个，但我们将选择“可命中”。
+
+这个“可命中”抽象类将有一个接受射线的`hit`函数。大多数光线追踪器发现将命中的有效区间添加到$t_{\mathit{min}}$
+和$t_{\mathit{max}}$非常方便，因此只有当$t_{\mathit{min}} < t < t_{\mathit{max}}$时，命中才“计数”。对于
+初始射线，这是正的$t$，但正如我们将看到的，将$t_{\mathit{min}}$到$t_{\mathit{max}}$作为一个区间可以简化我们
+的代码。一个设计问题是是否在命中物体时计算法线。当我们进行搜索时，我们可能会命中更近的物体，我们只需要最近的物
+体的法线。我会选择简单的解决方案，计算一些我将存储在某个结构中的东西。这是抽象类的定义：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef HITTABLE_H
+    #define HITTABLE_H
+
+    #include "ray.h"
+
+    class hit_record {
+      public:
+        point3 p;
+        vec3 normal;
+        double t;
+    };
+
+    class hittable {
+      public:
+        virtual ~hittable() = default;
+
+        virtual bool hit(const ray& r, double ray_tmin, double ray_tmax, hit_record& rec) const = 0;
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [hittable-initial]: <kbd>[hittable.h]</kbd> 可命中类]
+
+<div class='together'>
+球体
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef SPHERE_H
+    #define SPHERE_H
+
+    #include "hittable.h"
+    #include "vec3.h"
+
+    class sphere : public hittable {
+      public:
+        sphere(const point3& _center, double _radius) : center(_center), radius(_radius) {}
+
+        bool hit(const ray& r, double ray_tmin, double ray_tmax, hit_record& rec) const override {
+            vec3 oc = center - r.origin();
+            auto a = r.direction().length_squared();
+            auto h = dot(r.direction(), oc);
+            auto c = oc.length_squared() - radius*radius;
+
+            auto discriminant = h*h - a*c;
+            if (discriminant < 0) return false;
+            auto sqrtd = sqrt(discriminant);
+
+            // Find the nearest root that lies in the acceptable range.
+            auto root = (h - sqrtd) / a;
+            if (root <= ray_tmin || ray_tmax <= root) {
+                root = (h + sqrtd) / a;
+                if (root <= ray_tmin || ray_tmax <= root)
+                    return false;
+            }
+
+            rec.t = root;
+            rec.p = r.at(rec.t);
+            rec.normal = (rec.p - center) / radius;
+
+            return true;
+        }
+
+      private:
+        point3 center;
+        double radius;
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [sphere-initial]: <kbd>[sphere.h]</kbd> 球体类]
+
+</div>
+
+
+正面和背面
+------------------------------
+法线的第二个设计决策是它们是否应该始终指向外部。目前，找到的法线将始终指向中心点到交点的方向（法线指向外部）。
+如果射线从外部与球体相交，法线将指向射线的相反方向。如果射线从内部与球体相交，法线（始终指向外部）将与射线指向
+同一方向。或者，我们可以让法线始终指向射线的相反方向。如果射线在球体外部，法线将指向外部，但如果射线在球体内部，
+法线将指向内部。
+
+  ![Figure [normal-sides]: 球体表面法线几何的可能方向
+  ](../images/fig-1.07-normal-sides.jpg)
+
+我们需要选择其中一种可能性，因为我们最终需要确定射线是从表面的哪一侧进入的。这对于在每一侧都以不同方式渲染的
+对象（例如双面纸上的文字）或具有内部和外部的对象（例如玻璃球）非常重要。
+
+如果我们决定法线始终指向外部，那么在给射线上色时，我们需要确定射线在哪一侧。我们可以通过比较射线和法线来解决
+这个问题。如果射线和法线面向同一方向，那么射线在对象内部；如果射线和法线面向相反方向，那么射线在对象外部。这
+可以通过计算两个向量的点积来确定，如果点积为正数，则射线在球体内部。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    if (dot(ray_direction, outward_normal) > 0.0) {
+        // ray is inside the sphere
+        ...
+    } else {
+        // ray is outside the sphere
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-normal-comparison]: 比较射线和法线]
+
+<div class='together'>
+如果我们决定法线始终指向射线的相反方向，我们将无法使用点积来确定射线在表面的哪一侧。相反，我们需要存储该信息：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    bool front_face;
+    if (dot(ray_direction, outward_normal) > 0.0) {
+        // ray is inside the sphere
+        normal = -outward_normal;
+        front_face = false;
+    } else {
+        // ray is outside the sphere
+        normal = outward_normal;
+        front_face = true;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [normals-point-against]: 记住表面的一侧]
+
+</div>
+
+我们可以设置法线始终从表面“向外”指向，或者始终指向射入射线的相反方向。这个决策是通过在几何相交时还是在上色时确
+定表面的一侧来确定的。在本书中，我们的材质类型比几何类型多，因此我们会选择更少的工作量，并将决策放在几何时间。
+这只是一种偏好问题，在文献中会看到两种实现方式。
+
+我们在hit_record类中添加了front_face布尔值。我们还将添加一个函数来解决这个计算问题：set_face_normal()。为了
+方便起见，我们假设传递给新的set_face_normal()函数的向量是单位长度的。我们可以显式地对参数进行归一化，但如果几
+何代码进行此操作，效率更高，因为当你对特定的几何形状有更多了解时，这通常更容易。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class hit_record {
+      public:
+        point3 p;
+        vec3 normal;
+        double t;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        bool front_face;
+
+        void set_face_normal(const ray& r, const vec3& outward_normal) {
+            // Sets the hit record normal vector.
+            // NOTE: the parameter `outward_normal` is assumed to have unit length.
+
+            front_face = dot(r.direction(), outward_normal) < 0;
+            normal = front_face ? outward_normal : -outward_normal;
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [front-face-tracking]: <kbd>[hittable.h]</kbd>
+        向hit_record添加正面跟踪]
+
+<div class='together'>
+然后我们将表面一侧的确定性添加到类中：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class sphere : public hittable {
+      public:
+        ...
+        bool hit(const ray& r, double ray_tmin, double ray_tmax, hit_record& rec) const {
+            ...
+
+            rec.t = root;
+            rec.p = r.at(rec.t);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            vec3 outward_normal = (rec.p - center) / radius;
+            rec.set_face_normal(r, outward_normal);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            return true;
+        }
+        ...
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [sphere-final]: <kbd>[sphere.h]</kbd> 具有法线确定的球体类]
+
+</div>
+
+
+可击中对象列表
+---------------------------
+我们有一个称为`hittable`的通用对象，射线可以与其相交。现在我们添加一个类来存储`hittable`的列表：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef HITTABLE_LIST_H
+    #define HITTABLE_LIST_H
+
+    #include "hittable.h"
+
+    #include <memory>
+    #include <vector>
+
+    using std::shared_ptr;
+    using std::make_shared;
+
+    class hittable_list : public hittable {
+      public:
+        std::vector<shared_ptr<hittable>> objects;
+
+        hittable_list() {}
+        hittable_list(shared_ptr<hittable> object) { add(object); }
+
+        void clear() { objects.clear(); }
+
+        void add(shared_ptr<hittable> object) {
+            objects.push_back(object);
+        }
+
+        bool hit(const ray& r, double ray_tmin, double ray_tmax, hit_record& rec) const override {
+            hit_record temp_rec;
+            bool hit_anything = false;
+            auto closest_so_far = ray_tmax;
+
+            for (const auto& object : objects) {
+                if (object->hit(r, ray_tmin, closest_so_far, temp_rec)) {
+                    hit_anything = true;
+                    closest_so_far = temp_rec.t;
+                    rec = temp_rec;
+                }
+            }
+
+            return hit_anything;
+        }
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [hittable-list-initial]: <kbd>[hittable_list.h]</kbd> `hittable_list`类]
+
+
+一些新的C++特性
+----------------------
+`hittable_list`类的代码使用了两个C++特性，如果您平时不是C++程序员，可能会让您感到困惑：`vector`和`shared_ptr`。
+
+`shared_ptr<type>`是指向某个分配类型的指针，具有引用计数语义。每次将其值赋给另一个共享指针（通常使用简单的赋值），
+引用计数会递增。当共享指针超出作用域（比如在块或函数的末尾），引用计数会递减。一旦计数变为零，对象就会被安全删除。
+
+<div class='together'>
+通常，共享指针首先会用新分配的对象进行初始化，类似于这样：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    shared_ptr<double> double_ptr = make_shared<double>(0.37);
+    shared_ptr<vec3>   vec3_ptr   = make_shared<vec3>(1.414214, 2.718281, 1.618034);
+    shared_ptr<sphere> sphere_ptr = make_shared<sphere>(point3(0,0,0), 1.0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [shared-ptr]: 使用shared_ptr进行示例分配]
+
+</div>
+
+`make_shared<thing>(thing_constructor_params ...)`会使用构造函数参数分配一个新的`thing`类型实例。它返回一个`shared_ptr<thing>`。
+
+<div class='together'>
+由于类型可以通过`make_shared<type>(...)`的返回类型自动推导出来，所以上面的代码可以更简洁地使用C++的`auto`
+类型说明符来表示：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    auto double_ptr = make_shared<double>(0.37);
+    auto vec3_ptr   = make_shared<vec3>(1.414214, 2.718281, 1.618034);
+    auto sphere_ptr = make_shared<sphere>(point3(0,0,0), 1.0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [shared-ptr-auto]: 使用带有自动类型的shared_ptr进行示例分配]
+
+</div>
+
+我们在代码中使用共享指针，因为它允许多个几何体共享一个公共实例（例如，一堆使用相同颜色材质的球体），并且它使内
+存管理自动化且更易于理解。
+
+`std::shared_ptr`包含在`<memory>`头文件中。
+
+您可能不熟悉的第二个C++特性是`std::vector`。它是一个通用的类似数组的集合，可以存储任意类型的元素。在上面的代
+码中，我们使用了一个指向`hittable`的指针集合。`std::vector`在添加更多值时会自动增长：`objects.push_back(object)`
+会将一个值添加到`std::vector`成员变量`objects`的末尾。
+
+`std::vector`包含在`<vector>`头文件中。
+
+最后，列表[hittable-list-initial]中的`using`语句告诉编译器我们将从`std`库中获取`shared_ptr`和`make_shared`，
+所以我们不需要在每次引用它们时加上`std::`前缀。
+
+
+常用常量和实用函数
+---------------------------------------
+我们需要一些数学常量，我们可以方便地在它们自己的头文件中定义。目前我们只需要无穷大，但我们还会在其中添加我们自
+己的pi定义，稍后我们会用到它。关于pi，没有标准的可移植定义，所以我们只需定义自己的常量即可。我们将把常用的有用
+常量和未来的实用函数放在`rtweekend.h`中，这是我们的通用主头文件。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef RTWEEKEND_H
+    #define RTWEEKEND_H
+
+    #include <cmath>
+    #include <limits>
+    #include <memory>
+
+
+    // Usings
+
+    using std::shared_ptr;
+    using std::make_shared;
+    using std::sqrt;
+
+    // Constants
+
+    const double infinity = std::numeric_limits<double>::infinity();
+    const double pi = 3.1415926535897932385;
+
+    // Utility Functions
+
+    inline double degrees_to_radians(double degrees) {
+        return degrees * pi / 180.0;
+    }
+
+    // Common Headers
+
+    #include "ray.h"
+    #include "vec3.h"
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [rtweekend-initial]: <kbd>[rtweekend.h]</kbd> rtweekend.h通用头文件]
+
+<div class='together'>
+和新的主函数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "rtweekend.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    #include "color.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "hittable.h"
+    #include "hittable_list.h"
+    #include "sphere.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    #include <iostream>
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ delete
+    double hit_sphere(const point3& center, double radius, const ray& r) {
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    color ray_color(const ray& r, const hittable& world) {
+        hit_record rec;
+        if (world.hit(r, 0, infinity, rec)) {
+            return 0.5 * (rec.normal + color(1,1,1));
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        vec3 unit_direction = unit_vector(r.direction());
+        auto a = 0.5*(unit_direction.y() + 1.0);
+        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+    }
+
+    int main() {
+
+        // Image
+
+        auto aspect_ratio = 16.0 / 9.0;
+        int image_width = 400;
+
+        // 计算图像的高度，并确保至少为1。
+        int image_height = int(image_width / aspect_ratio);
+        image_height = (image_height < 1) ? 1 : image_height;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        // World
+
+        hittable_list world;
+
+        world.add(make_shared<sphere>(point3(0,0,-1), 0.5));
+        world.add(make_shared<sphere>(point3(0,-100.5,-1), 100));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        // Camera
+
+        auto focal_length = 1.0;
+        auto viewport_height = 2.0;
+        auto viewport_width = viewport_height * (double(image_width)/image_height);
+        auto camera_center = point3(0, 0, 0);
+
+        // 计算水平和垂直视口边缘的向量。
+        auto viewport_u = vec3(viewport_width, 0, 0);
+        auto viewport_v = vec3(0, -viewport_height, 0);
+
+        // 计算从像素到像素的水平和垂直增量向量。
+        auto pixel_delta_u = viewport_u / image_width;
+        auto pixel_delta_v = viewport_v / image_height;
+
+        // 计算左上角像素的位置。
+        auto viewport_upper_left = camera_center
+                                 - vec3(0, 0, focal_length) - viewport_u/2 - viewport_v/2;
+        auto pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+
+        // Render
+
+        std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+
+        for (int j = 0; j < image_height; j++) {
+            std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+            for (int i = 0; i < image_width; i++) {
+                auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
+                auto ray_direction = pixel_center - camera_center;
+                ray r(camera_center, ray_direction);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                color pixel_color = ray_color(r, world);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                write_color(std::cout, pixel_color);
+            }
+        }
+
+        std::clog << "\rDone.                 \n";
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-with-rtweekend-h]: <kbd>[main.cc]</kbd> 带有hittables的新主函数]
+
+</div>
+
+这将生成一个只是可视化球体位置以及它们的表面法线的图像。这通常是查看几何模型的任何缺陷或特定特征的好方法。
+
+  ![<span class='num'>Image 5:</span> 带有地面的法线着色球体的渲染结果
+  ](../images/img-1.05-normals-sphere-ground.png class='pixel')
+
+
+一个区间类
+------------------
+在我们继续之前，我们将实现一个区间类来管理具有最小值和最大值的实值区间。随着我们的进展，我们将经常使用这个类。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef INTERVAL_H
+    #define INTERVAL_H
+
+    class interval {
+      public:
+        double min, max;
+
+        interval() : min(+infinity), max(-infinity) {} // Default interval is empty
+
+        interval(double _min, double _max) : min(_min), max(_max) {}
+
+        double size() const {
+            return max - min;
+        }
+
+        bool contains(double x) const {
+            return min <= x && x <= max;
+        }
+
+        bool surrounds(double x) const {
+            return min < x && x < max;
+        }
+
+        static const interval empty, universe;
+    };
+
+    const interval interval::empty    = interval(+infinity, -infinity);
+    const interval interval::universe = interval(-infinity, +infinity);
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [interval-initial]: <kbd>[interval.h]</kbd> 介绍新的区间类]
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    // Common Headers
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    #include "interval.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "ray.h"
+    #include "vec3.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [interval-rtweekend]: <kbd>[rtweekend.h]</kbd> 包含新的区间类]
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class hittable {
+      public:
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        virtual bool hit(const ray& r, interval ray_t, hit_record& rec) const = 0;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [hittable-with-interval]: <kbd>[hittable.h]</kbd> 使用区间的hittable::hit()]
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class hittable_list : public hittable {
+      public:
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            hit_record temp_rec;
+            bool hit_anything = false;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto closest_so_far = ray_t.max;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            for (const auto& object : objects) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                if (object->hit(r, interval(ray_t.min, closest_so_far), temp_rec)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                    hit_anything = true;
+                    closest_so_far = temp_rec.t;
+                    rec = temp_rec;
+                }
+            }
+
+            return hit_anything;
+        }
+        ...
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [hittable-list-with-interval]: <kbd>[hittable_list.h]</kbd>
+        使用区间的hittable_list::hit()]
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class sphere : public hittable {
+      public:
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            ...
+
+            // Find the nearest root that lies in the acceptable range.
+            auto root = (h - sqrtd) / a;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            if (!ray_t.surrounds(root)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                root = (h + sqrtd) / a;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                if (!ray_t.surrounds(root))
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                    return false;
+            }
+            ...
+        }
+        ...
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [sphere-with-interval]: <kbd>[sphere.h]</kbd> 使用区间的球体]
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+    color ray_color(const ray& r, const hittable& world) {
+        hit_record rec;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        if (world.hit(r, interval(0, infinity), rec)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            return 0.5 * (rec.normal + color(1,1,1));
+        }
+
+        vec3 unit_direction = unit_vector(r.direction());
+        auto a = 0.5*(unit_direction.y() + 1.0);
+        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+    }
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-with-interval]: <kbd>[main.cc]</kbd> 使用区间的新主函数]
+
+
+
+将相机代码移入自己的类中
+====================================================================================================
+在继续之前，现在是将我们的相机和场景渲染代码合并到一个新的类中的好时机：`camera`类。相机类将负责两个重要的任务：
+
+  1. 构造并发送射线到世界中。
+  2. 使用这些射线的结果构造渲染图像。
+
+在这个重构中，我们将收集`ray_color()`函数以及主程序中的图像、相机和渲染部分。新的相机类将包含两个公共方法`initialize()`
+和`render()`，以及两个私有辅助方法`get_ray()`和`ray_color()`。
+
+最终，相机将遵循我们能想到的最简单的使用模式：它将使用默认构造函数无参数构造，然后拥有它的代码将通过简单赋值修
+改相机的公共变量，最后通过调用`initialize()`函数来初始化所有内容。选择这种模式是为了避免拥有者调用带有大量参
+数的构造函数或定义和调用大量的setter方法。相反，拥有者代码只需要设置它明确关心的内容。最后，拥有者代码可以调用
+`initialize()`，或者只是让相机在`render()`开始时自动调用这个函数。我们将使用第二种方法。
+
+在主程序中创建相机并设置默认值后，将调用`render()`方法。`render()`方法将准备相机进行渲染，然后执行渲染循环。
+
+<div class='together'>
+下面是我们新的`camera`类的框架：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef CAMERA_H
+    #define CAMERA_H
+
+    #include "rtweekend.h"
+
+    #include "color.h"
+    #include "hittable.h"
+
+    class camera {
+      public:
+        /* Public Camera Parameters Here */
+
+        void render(const hittable& world) {
+            ...
+        }
+
+      private:
+        /* Private Camera Variables Here */
+
+        void initialize() {
+            ...
+        }
+
+        color ray_color(const ray& r, const hittable& world) const {
+            ...
+        }
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-skeleton]: <kbd>[camera.h]</kbd> 相机类框架]
+
+</div>
+
+<div class='together'>
+首先，让我们填写main.cc中的ray_color()函数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      ...
+
+      private:
+        ...
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        color ray_color(const ray& r, const hittable& world) const {
+            hit_record rec;
+
+            if (world.hit(r, interval(0, infinity), rec)) {
+                return 0.5 * (rec.normal + color(1,1,1));
+            }
+
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-ray-color]: <kbd>[camera.h]</kbd> 相机的ray_color函数]
+
+</div>
+
+<div class='together'>
+现在我们将几乎所有内容从main()函数中移动到我们的新相机类中。main()函数中唯一剩下的是世界的构建。下面是带有新
+迁移代码的相机类：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+    #include "rtweekend.h"
+
+    #include "color.h"
+    #include "hittable.h"
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include <iostream>
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    class camera {
+      public:
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        double aspect_ratio = 1.0;  // Ratio of image width over height
+        int    image_width  = 100;  // Rendered image width in pixel count
+
+        void render(const hittable& world) {
+            initialize();
+
+            std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+
+            for (int j = 0; j < image_height; j++) {
+                std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+                for (int i = 0; i < image_width; i++) {
+                    auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
+                    auto ray_direction = pixel_center - center;
+                    ray r(center, ray_direction);
+
+                    color pixel_color = ray_color(r, world);
+                    write_color(std::cout, pixel_color);
+                }
+            }
+
+            std::clog << "\rDone.                 \n";
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+      private:
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        int    image_height;   // Rendered image height
+        point3 center;         // Camera center
+        point3 pixel00_loc;    // Location of pixel 0, 0
+        vec3   pixel_delta_u;  // Offset to pixel to the right
+        vec3   pixel_delta_v;  // Offset to pixel below
+
+        void initialize() {
+            image_height = int(image_width / aspect_ratio);
+            image_height = (image_height < 1) ? 1 : image_height;
+
+            center = point3(0, 0, 0);
+
+            // Determine viewport dimensions.
+            auto focal_length = 1.0;
+            auto viewport_height = 2.0;
+            auto viewport_width = viewport_height * (double(image_width)/image_height);
+
+            // Calculate the vectors across the horizontal and down the vertical viewport edges.
+            auto viewport_u = vec3(viewport_width, 0, 0);
+            auto viewport_v = vec3(0, -viewport_height, 0);
+
+            // Calculate the horizontal and vertical delta vectors from pixel to pixel.
+            pixel_delta_u = viewport_u / image_width;
+            pixel_delta_v = viewport_v / image_height;
+
+            // Calculate the location of the upper left pixel.
+            auto viewport_upper_left =
+                center - vec3(0, 0, focal_length) - viewport_u/2 - viewport_v/2;
+            pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        color ray_color(const ray& r, const hittable& world) const {
+            ...
+        }
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-working]: <kbd>[camera.h]</kbd> 工作的相机类]
+
+</div>
+
+<div class='together'>
+这里是大幅简化后的主程序：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "rtweekend.h"
+
+    #include "camera.h"
+    #include "hittable_list.h"
+    #include "sphere.h"
+
+    int main() {
+        hittable_list world;
+
+        world.add(make_shared<sphere>(point3(0,0,-1), 0.5));
+        world.add(make_shared<sphere>(point3(0,-100.5,-1), 100));
+
+        camera cam;
+
+        cam.aspect_ratio = 16.0 / 9.0;
+        cam.image_width  = 400;
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-with-new-camera]: <kbd>[main.cc]</kbd> 使用新相机的新主程序]
+
+</div>
+
+运行这个经过重构的程序应该会得到与之前相同的渲染图像。
+
+
+
+抗锯齿
+====================================================================================================
+如果你放大目前渲染出的图像，你可能会注意到图像边缘的"阶梯状"特性。这种阶梯状常被称为"锯齿"。
+当真实相机拍摄照片时，通常边缘处没有锯齿，因为边缘像素是前景和背景的混合。考虑到与我们的渲染图像不同，真实世界
+是连续的。换句话说，世界（以及任何真实的图像）具有无限的分辨率。我们可以通过对每个像素进行多个采样的平均来获得
+相同的效果。
+
+通过每个像素中心的单个光线，我们进行的是常被称为"点采样"的操作。点采样的问题可以通过渲染一个远处的小棋盘来说明。
+如果这个棋盘由一个8x8的黑白格子组成，但只有四条光线击中它，那么这四条光线可能只会相交白色格子，或者只有黑色格
+子，或者一些奇怪的组合。在真实世界中，当我们用眼睛观察远处的棋盘时，我们会将其视为灰色，而不是黑白的锐利点。这
+是因为我们的眼睛自然而然地做到了我们希望射线追踪器做到的：将光（连续函数）积分到我们渲染图像的特定（离散）区域。
+
+显然，通过多次对像素中心进行相同的重新采样并没有任何收益 - 我们每次只会得到相同的结果。相反，我们希望采样光线
+在像素周围的落在像素周围的光线，并将这些采样积分以近似真实的连续结果。那么，如何积分像素周围的光线？
+
+我们将采用最简单的模型：采样以像素为中心的方形区域，该区域延伸到每个相邻像素的一半。这不是最优的方法，但它是最
+直接的方法。（有关更深入探讨此主题，请参见[_像素不是一个小方块_][square-pixels]。）
+
+  ![Figure [pixel-samples]: 像素采样](../images/fig-1.08-pixel-samples.jpg)
+
+
+一些随机数工具
+-----------------------------
+我们需要一个能够返回真随机数的随机数生成器。这个函数应该返回一个规范化的随机数，按照惯例它的范围是$0 ≤ n < 1$。
+1前面的“小于”很重要，因为我们有时会利用这个性质。
+
+一个简单的方法是使用`<cstdlib>`中的`rand()`函数，它返回一个在0和`RAND_MAX`之间的随机整数。因此，我们可以通
+过下面的代码片段来获取所需的真随机数，并将其添加到`rtweekend.h`中：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include <cmath>
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    #include <cstdlib>
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include <limits>
+    #include <memory>
+    ...
+
+    // Utility Functions
+
+    inline double degrees_to_radians(double degrees) {
+        return degrees * pi / 180.0;
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    inline double random_double() {
+        // Returns a random real in [0,1).
+        return rand() / (RAND_MAX + 1.0);
+    }
+
+    inline double random_double(double min, double max) {
+        // Returns a random real in [min,max).
+        return min + (max-min)*random_double();
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [random-double]: <kbd>[rtweekend.h]</kbd> random_double()函数]
+
+传统上，C++没有标准的随机数生成器，但是较新版本的C++通过<random>头文件解决了这个问题（尽管根据一些专家的说法，
+不完美）。如果你想使用它，你可以按照以下条件获取我们所需的随机数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include <random>
+
+    inline double random_double() {
+        static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+        static std::mt19937 generator;
+        return distribution(generator);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [random-double-alt]: <kbd>[rtweekend.h]</kbd> random_double()，另一种实现方式]
+
+
+使用多个采样生成像素
+----------------------------------------
+对于由多个采样组成的单个像素，我们将从像素周围的区域选择采样，并将得到的光线（颜色）值进行平均。
+
+首先，我们将更新`write_color()`函数以考虑我们使用的采样数：我们需要找到所有取样中的平均值。为了做到这一点，
+我们将在每次迭代中添加完整的颜色，并在最后进行一次除法运算（除以采样数），然后将颜色写出。为了确保最终结果的
+颜色分量保持在正确的$[0,1]$范围内，我们将添加并使用一个小的辅助函数：`interval::clamp(x)`。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class interval {
+      public:
+        ...
+
+        bool surrounds(double x) const {
+            return min < x && x < max;
+        }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        double clamp(double x) const {
+            if (x < min) return min;
+            if (x > max) return max;
+            return x;
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        ...
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [clamp]: <kbd>[interval.h]</kbd> interval::clamp()辅助函数]
+
+下面是更新后的write_color()函数，它接收像素的所有光线总和和涉及的采样数：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    void write_color(std::ostream& out, const color& pixel_color, int samples_per_pixel) {
+        auto r = pixel_color.x();
+        auto g = pixel_color.y();
+        auto b = pixel_color.z();
+
+        // Divide the color by the number of samples.
+        auto scale = 1.0 / samples_per_pixel;
+        r *= scale;
+        g *= scale;
+        b *= scale;
+
+        // Write the translated [0,255] value of each color component.
+        static const interval intensity(0.000, 0.999);
+        out << int(256 * intensity.clamp(r)) << ' '
+            << int(256 * intensity.clamp(g)) << ' '
+            << int(256 * intensity.clamp(b)) << '\n';
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [write-color-clamped]: <kbd>[color.h]</kbd> 多采样write_color()函数]
+
+现在让我们更新相机类，定义并使用一个新的camera::get_ray(i,j)函数，该函数为每个像素生成不同的采样。这个函数将
+使用一个新的辅助函数pixel_sample_square()，它在以原点为中心的单位正方形内生成一个随机采样点。然后，我们将从
+这个理想正方形中的随机采样转换回我们当前正在采样的特定像素。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      public:
+        double aspect_ratio      = 1.0;  // Ratio of image width over height
+        int    image_width       = 100;  // Rendered image width in pixel count
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        int    samples_per_pixel = 10;   // Count of random samples for each pixel
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        void render(const hittable& world) {
+            initialize();
+
+            std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+
+            for (int j = 0; j < image_height; j++) {
+                std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+                for (int i = 0; i < image_width; i++) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                    color pixel_color(0,0,0);
+                    for (int sample = 0; sample < samples_per_pixel; sample++) {
+                        ray r = get_ray(i, j);
+                        pixel_color += ray_color(r, world);
+                    }
+                    write_color(std::cout, pixel_color, samples_per_pixel);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                }
+            }
+
+            std::clog << "\rDone.                 \n";
+        }
+        ...
+      private:
+        ...
+        void initialize() {
+          ...
+        }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        ray get_ray(int i, int j) const {
+            // Get a randomly sampled camera ray for the pixel at location i,j.
+
+            auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
+            auto pixel_sample = pixel_center + pixel_sample_square();
+
+            auto ray_origin = center;
+            auto ray_direction = pixel_sample - ray_origin;
+
+            return ray(ray_origin, ray_direction);
+        }
+
+        vec3 pixel_sample_square() const {
+            // Returns a random point in the square surrounding a pixel at the origin.
+            auto px = -0.5 + random_double();
+            auto py = -0.5 + random_double();
+            return (px * pixel_delta_u) + (py * pixel_delta_v);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        ...
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-spp]: <kbd>[camera.h]</kbd> 具有每像素采样数参数的相机]
+
+</div>
+
+（除了上面的pixel_sample_square()函数之外，您还可以在Github源代码中找到pixel_sample_disk()函数。这是为了
+方便您尝试非方形像素而包含的，但在本书中我们不会使用它。pixel_sample_disk()依赖于稍后定义的random_in_unit_disk()
+函数。）
+
+<div class='together'>
+主函数更新以设置新的相机参数。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        ...
+
+        camera cam;
+
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 400;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        cam.samples_per_pixel = 100;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-spp]: <kbd>[main.cc]</kbd> 设置新的每像素采样数参数]
+
+</div>
+
+<div class='together'>
+放大生成的图像，我们可以看到边缘像素的差异。
+
+  ![<span class='num'>Image 6:</span> 抗锯齿前后对比
+  ](../images/img-1.06-antialias-before-after.png class='pixel')
+
+</div>
+
+
+
+漫反射材质
+====================================================================================================
+现在我们已经有了物体和每个像素多条光线，我们可以制作一些逼真的材质了。
+我们将从漫反射材质（也称为“哑光”）开始。一个问题是我们是否混合和匹配几何体和材质（这样我们可以将一个材质分配给
+多个球体，反之亦然），
+还是几何体和材质紧密绑定（这对于几何体和材质链接的程序对象可能很有用）。我们将选择分开-这在大多数渲染器中是常
+见的-但请注意还有其他方法。
+
+一个简单的漫反射材质
+--------------------------
+不发出自己的光的漫反射物体仅仅会采用其周围环境的颜色，但它们会用自己固有的颜色调制它。
+反射在漫反射表面上的光线的方向会被随机化，因此，如果我们将三条光线发送到两个漫反射表面之间的裂缝中，它们每个都
+会有不同的随机行为：
+
+  ![Figure [light-bounce]: 光线的反射](../images/fig-1.09-light-bounce.jpg)
+
+光线也可能被吸收而不是反射。表面越暗，光线被吸收的可能性越大（这就是为什么它是暗的！）。任何随机化方向的算法都
+会产生看起来哑光的表面。让我们从最直观的开始：一个表面在所有方向上都随机反射光线。对于这种材质，击中表面的光线
+有同等的概率从表面上任何方向反射出去。
+
+  ![Figure [random-vec-hor]: 在水平面上方的等反射
+  ](../images/fig-1.10-random-vec-horizon.jpg)
+
+这种非常直观的材质是最简单的漫反射材质类型，事实上，许多最初的光线追踪论文都使用了这种漫反射方法（后来采用了更
+精确的方法，稍后我们将实现）。目前我们还没有一种方法来随机反射光线，所以我们需要在我们的向量工具头文件中添加一
+些函数。我们首先需要的是生成任意随机向量的能力：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class vec3 {
+      public:
+        ...
+
+        double length_squared() const {
+            return e[0]*e[0] + e[1]*e[1] + e[2]*e[2];
+        }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+        static vec3 random() {
+            return vec3(random_double(), random_double(), random_double());
+        }
+
+        static vec3 random(double min, double max) {
+            return vec3(random_double(min,max), random_double(min,max), random_double(min,max));
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [vec-rand-util]: <kbd>[vec3.h]</kbd> vec3随机实用函数]
+
+然后，我们需要找出如何操作一个随机向量，以便我们只得到在半球面上的结果。有解析方法可以做到这一点，但实际上它们
+非常复杂难以理解，并且实现起来相当复杂。相反，我们将使用通常最简单的算法：拒绝方法。拒绝方法通过反复生成随机采
+样，直到我们产生满足所需条件的采样为止。换句话说，不断拒绝采样，直到找到一个好的采样。
+
+使用拒绝方法有很多同样有效的方法来生成一个在半球面上的随机向量，但为了我们的目的，我们将选择最简单的方法：
+
+1. 在单位球内生成一个随机向量
+2. 对该向量进行归一化
+3. 如果归一化的向量落在错误的半球上，则反转它
+
+<div class='together'>
+首先，我们将使用拒绝方法生成单位球内的随机向量。在单位立方体中选择一个随机点，其中$x$、$y$和$z$的取值范围都是
+-1到+1，如果该点在单位球外部，则拒绝该点。
+
+  ![Figure [sphere-vec]: 在找到一个好的向量之前，有两个向量被拒绝了
+  ](../images/fig-1.11-sphere-vec.jpg)
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    inline vec3 unit_vector(const vec3& v) {
+        return v / v.length();
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    inline vec3 random_in_unit_sphere() {
+        while (true) {
+            auto p = vec3::random(-1,1);
+            if (p.length_squared() < 1)
+                return p;
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [random-in-unit-sphere]: <kbd>[vec3.h]</kbd> random_in_unit_sphere()函数 ]
+
+</div>
+
+<div class='together'>
+一旦我们有了一个在单位球内的随机向量，我们需要将其归一化以得到一个在单位球上的向量。
+
+  ![Figure [sphere-vec]: 接受的随机向量被归一化为产生一个单位向量
+  ](../images/fig-1.12-sphere-unit-vec.jpg)
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    inline vec3 random_in_unit_sphere() {
+        while (true) {
+            auto p = vec3::random(-1,1);
+            if (p.length_squared() < 1)
+                return p;
+        }
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    inline vec3 random_unit_vector() {
+        return unit_vector(random_in_unit_sphere());
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [random-unit-vec]: <kbd>[vec3.h]</kbd> 单位球上的随机向量 ]
+
+</div>
+
+<div class='together'>
+现在，我们有了一个在单位球表面上的随机向量，我们可以通过与表面法线进行比较来确定它是否在正确的半球上：
+
+  ![Figure [normal-hor]: 法线向量告诉我们我们需要哪个半球
+  ](../images/fig-1.13-surface-normal.jpg)
+
+</div>
+
+<div class='together'>
+我们可以通过计算表面法线和随机向量的点积来确定它是否在正确的半球上。如果点积为正，那么向量就在正确的半球上。
+如果点积为负，则需要反转向量。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    inline vec3 random_unit_vector() {
+        return unit_vector(random_in_unit_sphere());
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    inline vec3 random_on_hemisphere(const vec3& normal) {
+        vec3 on_unit_sphere = random_unit_vector();
+        if (dot(on_unit_sphere, normal) > 0.0) // In the same hemisphere as the normal
+            return on_unit_sphere;
+        else
+            return -on_unit_sphere;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [random-in-hemisphere]: <kbd>[vec3.h]</kbd> random_on_hemisphere()函数]
+
+</div>
+
+如果光线从材质上反射并保持了100%的颜色，我们称该材质为“白色”。如果光线从材质上反射并保持了0%的颜色，我们称该
+材质为“黑色”。作为对新的漫反射材质的首次演示，我们将设置`ray_color`函数返回反射的颜色的50%。我们应该期望得到
+一个漂亮的灰色。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      ...
+      private:
+        ...
+        color ray_color(const ray& r, const hittable& world) const {
+            hit_record rec;
+
+            if (world.hit(r, interval(0, infinity), rec)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                vec3 direction = random_on_hemisphere(rec.normal);
+                return 0.5 * ray_color(ray(rec.p, direction), world);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            }
+
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-color-random-unit]: <kbd>[camera.h]</kbd>
+        使用随机光线方向的ray_color() ]
+
+<div class='together'>
+...确实，我们得到了相当漂亮的灰色球体：
+
+  ![<span class='num'>Image 7:</span> 漫反射球体的首次渲染
+  ](../images/img-1.07-first-diffuse.png class='pixel')
+
+</div>
+
+
+限制子光线的数量
+-------------------------
+这里存在一个潜在的问题。请注意`ray_color`函数是递归的。它什么时候停止递归？当它未能击中任何物体时。然而，
+在某些情况下，这可能需要很长时间 - 足够长的时间来导致堆栈溢出。为了防止这种情况发生，让我们限制最大递归深度，
+在达到最大深度时不返回任何光照贡献：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      public:
+        double aspect_ratio      = 1.0;  // Ratio of image width over height
+        int    image_width       = 100;  // Rendered image width in pixel count
+        int    samples_per_pixel = 10;   // Count of random samples for each pixel
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        int    max_depth         = 10;   // Maximum number of ray bounces into scene
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        void render(const hittable& world) {
+            initialize();
+
+            std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
+
+            for (int j = 0; j < image_height; j++) {
+                std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+                for (int i = 0; i < image_width; i++) {
+                    color pixel_color(0,0,0);
+                    for (int sample = 0; sample < samples_per_pixel; sample++) {
+                        ray r = get_ray(i, j);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                        pixel_color += ray_color(r, max_depth, world);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                    }
+                    write_color(std::cout, pixel_color, samples_per_pixel);
+                }
+            }
+
+            std::clog << "\rDone.                 \n";
+        }
+        ...
+      private:
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        color ray_color(const ray& r, int depth, const hittable& world) const {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            hit_record rec;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            // If we've exceeded the ray bounce limit, no more light is gathered.
+            if (depth <= 0)
+                return color(0,0,0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            if (world.hit(r, interval(0, infinity), rec)) {
+                vec3 direction = random_on_hemisphere(rec.normal);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                return 0.5 * ray_color(ray(rec.p, direction), depth-1, world);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            }
+
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-color-depth]: <kbd>[camera.h]</kbd> 带有深度限制的camera::ray_color()函数]
+
+<div class='together'>
+更新main()函数以使用这个新的深度限制：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        ...
+
+        camera cam;
+
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 400;
+        cam.samples_per_pixel = 100;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        cam.max_depth         = 50;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [main-ray-depth]: <kbd>[main.cc]</kbd>使用新的光线深度限制]
+
+</div>
+
+<div class='together'>
+对于这个非常简单的场景，我们应该得到基本相同的结果：
+
+  ![<span class='num'>Image 8：</span>有限反射次数的漫反射球体的第二次渲染
+  ](../images/img-1.08-second-diffuse.png class='pixel')
+
+</div>
+
+
+修复阴影痤疮
+-------------------
+我们还需要解决一个微妙的 bug。当光线与表面相交时，它将尝试准确计算交点。然而，对于我们来说，这个计算容易受
+到浮点舍入误差的影响，这可能导致交点略微偏离。这意味着下一条光线的起点，即从表面上随机散射出的光线，不太可
+能与表面完全平齐。它可能略微在表面上方，也可能略微在表面下方。如果光线的起点刚好在表面下方，那么它可能会再
+次与该表面相交。这意味着它将在$t=0.00000001$或其他浮点近似值处找到最近的表面。解决此问题的最简单方法是忽
+略非常接近计算交点的相交点：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      ...
+      private:
+        ...
+        color ray_color(const ray& r, int depth, const hittable& world) const {
+            hit_record rec;
+
+            // If we've exceeded the ray bounce limit, no more light is gathered.
+            if (depth <= 0)
+                return color(0,0,0);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            if (world.hit(r, interval(0.001, infinity), rec)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                vec3 direction = random_on_hemisphere(rec.normal);
+                return 0.5 * ray_color(ray(rec.p, direction), depth-1, world);
+            }
+
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [reflect-tolerance]: <kbd>[camera.h]</kbd>
+        使用容差计算反射光线的起点]
+
+</div>
+
+<div class='together'>
+这样就解决了阴影痤疮问题。是的，它真的被称为阴影痤疮。以下是结果：
+
+  ![<span class='num'>Image 9：</span>没有阴影痤疮的漫反射球体
+  ](../images/img-1.09-no-acne.png class='pixel')
+
+</div>
+
+
+真正的Lambertian反射
+---------------------------
+将反射光线均匀散射到半球上，可以得到一个漂亮的柔和漫反射模型，但我们肯定可以做得更好。对真实漫反射物体的更准确
+的表示是_Lambertian_分布。该分布以与表面法线之间的角度$\phi$成比例地散射反射光线，其中$\phi$是反射光线与表面
+法线之间的角度。这意味着反射光线最有可能在接近表面法线的方向上散射，而在远离法线的方向上散射的可能性较小。与我
+们之前的均匀散射相比，这种非均匀的Lambertian分布更好地模拟了真实世界中材料的反射。
+
+我们可以通过将一个随机单位向量添加到法线向量上来创建这个分布。在表面上的交点处，有一个命中点$\mathbf{p}$和表
+面的法线$\mathbf{n}$。在交点处，该表面有两个唯一的接触点，所以对于任何交点，只能有两个与之相切的单位球（每个
+表面的一个唯一的球）。这两个单位球将通过其半径的长度从表面上移开，对于单位球来说，半径恰好为1。
+
+一个球将沿着表面法线的方向（$\mathbf{n}$）移开，另一个球将沿着相反的方向（$\mathbf{-n}$）移开。这样，我们得
+到了两个单位尺寸的球，它们只在交点处“刚好”接触表面。其中一个球的中心位于$(\mathbf{P} + \mathbf{n})$，另一个
+球的中心位于$(\mathbf{P} - \mathbf{n})$。中心位于$(\mathbf{P} - \mathbf{n})$的球被认为是在表面“内部”，而
+中心位于$(\mathbf{P} + \mathbf{n})$的球被认为是在表面“外部”。
+
+我们想要选择与光线起点在表面同一侧的切线单位球。在这个单位半径球上选择一个随机点$\mathbf{S}$，并从命中点
+$\mathbf{P}$向随机点$\mathbf{S}$发送一条光线（这是向量$(\mathbf{S}-\mathbf{P})$）：
+
+  ![Image [rand-unitvec]：根据Lambertian分布随机生成一个向量
+  ](../images/fig-1.14-rand-unitvec.jpg)
+
+<div class='together'>
+变化实际上相当小：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+        ...
+        color ray_color(const ray& r, int depth, const hittable& world) const {
+            hit_record rec;
+
+            // If we've exceeded the ray bounce limit, no more light is gathered.
+            if (depth <= 0)
+                return color(0,0,0);
+
+            if (world.hit(r, interval(0.001, infinity), rec)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                vec3 direction = rec.normal + random_unit_vector();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                return 0.5 * ray_color(ray(rec.p, direction), depth-1, world);
+        }
+
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-color-unit-sphere]: <kbd>[camera.h]</kbd>使用替代漫反射的ray_color()]
+
+</div>
+
+<div class='together'>
+渲染后，我们得到了一个类似的图像：
+
+  ![<span class='num'>图像 10：</span>正确渲染的Lambertian球体
+  ](../images/img-1.10-correct-lambertian.png class='pixel')
+
+</div>
+
+由于我们的场景只有两个球体，很难区分这两种漫反射方法的区别，但你应该能够注意到两个重要的视觉差异：
+
+  1. 更明显的阴影
+  2. 两个球体都从天空中获得了蓝色的色彩
+
+这些变化都是由于光线的非均匀散射导致的 - 更多的光线向法线方向散射。这意味着对于漫反射对象来说，它们会显得更“暗”，
+因为较少的光线反射到相机。对于阴影来说，更多的光线垂直反射，因此球体下方的区域更暗。
+
+很少有常见的日常物体是完全漫射的，所以我们对这些物体在光线下的行为的视觉直觉可能不准确。随着本书中场景的复杂化，
+我们鼓励您在不同的漫反射渲染器之间切换。大多数有趣的场景都会包含大量的漫反射材料。通过了解不同漫反射方法对场景
+照明的影响，您可以获得有价值的见解。
+
+
+
+使用伽马校正进行准确的颜色强度
+----------------------------------------------------
+注意球体下面的阴影。图片非常暗，但我们的球体只吸收了每次反弹的能量的一半，因此它们是50%的反射体。球体应该
+看起来相当明亮（在现实生活中，是浅灰色），但它们看起来相当暗淡。如果我们遍历完整的亮度色阶，我们可以更清楚
+地看到这一点。我们从将`ray_color`函数的反射率从`0.5`（50%）设置为`0.1`（10%）开始：
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+class camera {
+    ...
+    color ray_color(const ray& r, int depth, const hittable& world) const {
+        hit_record rec;
+
+        // If we've exceeded the ray bounce limit, no more light is gathered.
+        if (depth <= 0)
+            return color(0,0,0);
+
+        if (world.hit(r, interval(0.001, infinity), rec)) {
+            vec3 direction = rec.normal + random_unit_vector();
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            return 0.1 * ray_color(ray(rec.p, direction), depth-1, world);
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    }
+
+        vec3 unit_direction = unit_vector(r.direction());
+        auto a = 0.5*(unit_direction.y() + 1.0);
+        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+    }
+};
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+[Listing [ray-color-gamut]：<kbd>[camera.h]</kbd>具有10％反射率的ray_color（）]
+
+我们以这个新的10%反射率进行渲染。然后我们将反射率设置为30％并再次渲染。我们重复进行50％、70％和最后的90％。
+您可以在您选择的照片编辑器中从左到右叠加这些图像，您应该会得到一个非常好的视觉表示您选择的色阶的逐渐增加的亮度。
+这是我们到目前为止一直在使用的色阶：
+
+![<span class='num'>Image 11：</span>迄今为止我们渲染器的色阶
+](../images/img-1.11-linear-gamut.png class='pixel')
+
+如果您仔细观察，或者使用颜色选择器，您应该注意到50％的反射率渲染（中间的渲染）太暗，不可能是白色和黑色之间
+的一半（中灰）。事实上，70％的反射率更接近中灰。原因是几乎所有的计算机程序都假定图像在写入图像文件之前进行
+了“伽马校正”。这意味着0到1的值在存储为字节之前应用了一些变换。写入没有经过变换的数据的图像称为“线性空间”，
+而经过变换的图像称为“伽马空间”。您正在使用的图像查看器可能期望图像处于伽马空间中，但我们给它的图像处于线性
+空间中。这就是为什么我们的图像看起来不准确地暗淡的原因。
+
+图像应该存储在伽马空间中有很多很好的理由，但对于我们的目的，我们只需要知道这一点。我们将转换我们的数据为伽
+马空间，以便我们的图像查看器可以更准确地显示我们的图像。作为一个简单的近似，我们可以使用“伽马2”作为我们的
+转换，这是当从伽马空间转换到线性空间时使用的幂。我们需要从线性空间转换为伽马空间，这意味着需要取“伽马2”的倒
+数，即指数为$1/\mathit{gamma}$，即平方根。我们还希望确保我们稳健地处理负输入。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    inline double linear_to_gamma(double linear_component)
+    {
+        if (linear_component > 0)
+            return sqrt(linear_component);
+
+        return 0;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    void write_color(std::ostream& out, const color& pixel_color, int samples_per_pixel) {
+        auto r = pixel_color.x();
+        auto g = pixel_color.y();
+        auto b = pixel_color.z();
+
+        // Divide the color by the number of samples.
+        auto scale = 1.0 / samples_per_pixel;
+        r *= scale;
+        g *= scale;
+        b *= scale;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        // Apply the linear to gamma transform.
+        r = linear_to_gamma(r);
+        g = linear_to_gamma(g);
+        b = linear_to_gamma(b);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        // Write the translated [0,255] value of each color component.
+        static const interval intensity(0.000, 0.999);
+        out << int(256 * intensity.clamp(r)) << ' '
+            << int(256 * intensity.clamp(g)) << ' '
+            << int(256 * intensity.clamp(b)) << '\n';
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [write-color-gamma]：<kbd>[color.h]</kbd> write_color（），进行伽马校正]
+
+
+<div class='together'>
+使用这种伽马校正，我们现在得到了一个更加一致的从黑暗到亮度的渐变：
+
+  ![<span class='num'>Image 12：</span>经过伽马校正的两个漫反射球体的渲染
+  ](../images/img-1.12-gamma-gamut.png class='pixel')
+
+</div>
+
+
+
+金属
+====================================================================================================
+
+用于材质的抽象类
+--------------------------------
+如果我们希望不同的物体具有不同的材质，我们需要做出一个设计决策。我们可以使用具有许多参数的通用材质类型，以便任
+何个别材质类型都可以忽略不影响它的参数。这不是一种坏的方法。或者我们可以使用一个抽象材质类来封装独特的行为。
+我倾向于后一种方法。对于我们的程序，材质需要做两件事：
+
+  1. 产生散射光线（或说吸收入射光线）。
+  2. 如果散射，说明光线应该被衰减多少。
+
+<div class='together'>
+这就暗示了抽象类：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #ifndef MATERIAL_H
+    #define MATERIAL_H
+
+    #include "rtweekend.h"
+
+    class hit_record;
+
+    class material {
+      public:
+        virtual ~material() = default;
+
+        virtual bool scatter(
+            const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered) const = 0;
+    };
+
+    #endif
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [material-initial]: <kbd>[material.h]</kbd> 材质类]
+
+</div>
+
+
+描述光线-物体相交的数据结构
+------------------------------------------------------
+`hit_record`是为了避免一堆参数，因此我们可以将任何我们想要的信息放入其中。您可以使用参数而不是封装的类型，
+这只是一种口味问题。可击中物体和材质需要能够在代码中引用其他类型，因此存在一些循环引用的问题。在C++中，我们
+添加了一行`class material;`来告诉编译器`material`是一个将在稍后定义的类。由于我们只是指定了一个指向该类的
+指针，编译器不需要知道该类的详细信息，解决了循环引用问题。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "rtweekend.h"
+
+    class material;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    class hit_record {
+      public:
+        point3 p;
+        vec3 normal;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        shared_ptr<material> mat;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        double t;
+        bool front_face;
+
+        void set_face_normal(const ray& r, const vec3& outward_normal) {
+            front_face = dot(r.direction(), outward_normal) < 0;
+            normal = front_face ? outward_normal : -outward_normal;
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [hit-with-material]: <kbd>[hittable.h]</kbd> 添加了材质指针的击中记录]
+
+`hit_record`只是一种将一堆参数装入一个类中的方法，以便我们可以将它们作为一组发送出去。当一条光线击中一个表面
+（例如一个特定的球体），`hit_record`中的材质指针将被设置为指向球体在`main()`中设置时给出的材质指针。当`ray_color()`
+例程获得`hit_record`时，它可以调用材质指针的成员函数来找出是否散射了光线。
+
+<div class='together'>
+为了实现这一点，需要告诉`hit_record`分配给球体的材质。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class sphere : public hittable {
+      public:
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        sphere(const point3& _center, double _radius, shared_ptr<material> _material)
+          : center(_center), radius(_radius), mat(_material) {}
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        bool hit(const ray& r, interval ray_t, hit_record& rec) const override {
+            ...
+
+            rec.t = root;
+            rec.p = r.at(rec.t);
+            vec3 outward_normal = (rec.p - center) / radius;
+            rec.set_face_normal(r, outward_normal);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            rec.mat = mat;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            return true;
+        }
+
+      private:
+        point3 center;
+        double radius;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        shared_ptr<material> mat;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [sphere-material]: <kbd>[sphere.h]</kbd>
+        具有添加的材质信息的射线-球体相交]
+
+</div>
+
+
+建模光线散射和反射
+---------------------------------------
+对于我们已经具有的Lambertian（漫反射）情况，它可以始终散射并经过其反射率$R$进行衰减，或者它可以有时散射
+（以概率$1-R$）而没有衰减（其中没有散射的光线仅被材质吸收）。它也可以是这两种策略的混合物。我们将选择始终散射，
+因此Lambertian材质变成了这个简单的类：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class material {
+        ...
+    };
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    class lambertian : public material {
+      public:
+        lambertian(const color& a) : albedo(a) {}
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            auto scatter_direction = rec.normal + random_unit_vector();
+            scattered = ray(rec.p, scatter_direction);
+            attenuation = albedo;
+            return true;
+        }
+
+      private:
+        color albedo;
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [lambertian-initial]: <kbd>[material.h]</kbd> 新的Lambertian材质类]
+
+请注意，我们可以散射的第三个选择是以一定的概率$p$散射，并且衰减为$\mathit{albedo}/p$。由您选择。
+
+如果您仔细阅读上面的代码，您会注意到一种小恶作剧的机会。如果我们生成的随机单位向量恰好与法线向量相反，那么它们
+将相加得到零，这将导致散射方向向量为零。这会导致后面出现糟糕的情况（无穷大和NaN），因此我们需要在将其传递之前
+拦截该条件。
+
+为了解决这个问题，我们将创建一个新的向量方法 - `vec3::near_zero()` - 如果向量在所有维度上非常接近于零，
+则返回true。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class vec3 {
+        ...
+
+        double length_squared() const {
+            return e[0]*e[0] + e[1]*e[1] + e[2]*e[2];
+        }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+        bool near_zero() const {
+            // 如果向量在所有维度上接近于零，则返回true。
+            auto s = 1e-8;
+            return (fabs(e[0]) < s) && (fabs(e[1]) < s) && (fabs(e[2]) < s);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        ...
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [vec3-near-zero]: <kbd>[vec3.h]</kbd> vec3::near_zero() 方法]
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class lambertian : public material {
+      public:
+        lambertian(const color& a) : albedo(a) {}
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            auto scatter_direction = rec.normal + random_unit_vector();
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            // 捕捉退化的散射方向
+            if (scatter_direction.near_zero())
+                scatter_direction = rec.normal;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            scattered = ray(rec.p, scatter_direction);
+            attenuation = albedo;
+            return true;
+        }
+
+      private:
+        color albedo;
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [lambertian-catch-zero]: <kbd>[material.h]</kbd> Lambertian散射，防弹]
+
+
+
+镜面光反射
+--------------------------
+对于抛光金属，光线不会随机散射。关键问题是：光线如何从金属镜面反射？这里我们可以用向量数学来解答：
+
+  ![Image [reflection]: 光线反射](../images/fig-1.15-reflection.jpg)
+
+红色的反射光线方向就是 $\mathbf{v} + 2\mathbf{b}$。在我们的设计中，$\mathbf{n}$
+是一个单位向量，但 $\mathbf{v}$ 可能不是。$\mathbf{b}$ 的长度应该是 $\mathbf{v}
+\cdot \mathbf{n}$。因为 $\mathbf{v}$ 指向内部，我们需要一个负号，得到：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    inline vec3 random_on_hemisphere(const vec3& normal) {
+        ...
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    inline vec3 reflect(const vec3& v, const vec3& n) {
+        return v - 2*dot(v,n)*n;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [vec3-reflect]: <kbd>[vec3.h]</kbd> vec3 反射函数]
+
+<div class='together'>
+金属材质只是使用该公式反射光线：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    class lambertian : public material {
+        ...
+    };
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    class metal : public material {
+      public:
+        metal(const color& a) : albedo(a) {}
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            vec3 reflected = reflect(unit_vector(r_in.direction()), rec.normal);
+            scattered = ray(rec.p, reflected);
+            attenuation = albedo;
+            return true;
+        }
+
+      private:
+        color albedo;
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [metal-material]: <kbd>[material.h]</kbd> 具有反射函数的金属材质]
+
+</div>
+
+<div class='together'>
+我们需要修改 `ray_color()` 函数以适应所有的更改：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+    #include "rtweekend.h"
+
+    #include "color.h"
+    #include "hittable.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "material.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    class camera {
+      ...
+      private:
+        ...
+        color ray_color(const ray& r, int depth, const hittable& world) const {
+            hit_record rec;
+
+            // 如果我们超过了光线反弹限制，就不再收集光线。
+            if (depth <= 0)
+                return color(0,0,0);
+
+            if (world.hit(r, interval(0.001, infinity), rec)) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                ray scattered;
+                color attenuation;
+                if (rec.mat->scatter(r, rec, attenuation, scattered))
+                    return attenuation * ray_color(scattered, depth-1, world);
+                return color(0,0,0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            }
+
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-color-scatter]: <kbd>[camera.h]</kbd> 具有散射反射的光线颜色]
+
+</div>
+
+
+
+带有金属球体的场景
+---------------------------
+现在让我们在我们的场景中添加一些金属球体：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "rtweekend.h"
+
+    #include "camera.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "color.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "hittable_list.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    #include "material.h"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    #include "sphere.h"
+
+    int main() {
+        hittable_list world;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
+        auto material_center = make_shared<lambertian>(color(0.7, 0.3, 0.3));
+        auto material_left   = make_shared<metal>(color(0.8, 0.8, 0.8));
+        auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2));
+
+        world.add(make_shared<sphere>(point3( 0.0, -100.5, -1.0), 100.0, material_ground));
+        world.add(make_shared<sphere>(point3( 0.0,    0.0, -1.0),   0.5, material_center));
+        world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, material_left));
+        world.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        camera cam;
+
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 400;
+        cam.samples_per_pixel = 100;
+        cam.max_depth         = 50;
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-with-metal]: <kbd>[main.cc]</kbd> 带有金属球体的场景]
+
+<div class='together'>
+这将产生：
+
+  ![<span class='num'>Image 13:</span> 闪亮的金属
+  ](../images/img-1.13-metal-shiny.png class='pixel')
+
+</div>
+
+
+模糊反射
+-----------------
+我们也可以通过使用一个小球体并为光线选择一个新的终点来随机化反射方向。我们将使用一个以原始终点为中心的球体表面的随机点，然后按照模糊因子进行缩放。
+
+  ![图 [reflect-fuzzy]: 生成模糊反射光线](../images/fig-1.16-reflect-fuzzy.jpg)
+
+球体越大，反射就越模糊。这建议添加一个模糊度参数，这个参数就是球体的半径（所以零就是没有扰动）。问题是，对于大球体或者接近平行的光线，我们可能会在表面以下散射。我们可以让表面吸收这些。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class metal : public material {
+      public:
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        metal(const color& a, double f) : albedo(a), fuzz(f < 1 ? f : 1) {}
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            vec3 reflected = reflect(unit_vector(r_in.direction()), rec.normal);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            scattered = ray(rec.p, reflected + fuzz*random_unit_vector());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            attenuation = albedo;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            return (dot(scattered.direction(), rec.normal) > 0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        }
+
+      private:
+        color albedo;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        double fuzz;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [metal-fuzz]: <kbd>[material.h]</kbd> 金属材质模糊度]
+
+<div class='together'>
+我们可以通过给金属添加0.3和1.0的模糊度来试试看：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        ...
+        auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
+        auto material_center = make_shared<lambertian>(color(0.7, 0.3, 0.3));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto material_left   = make_shared<metal>(color(0.8, 0.8, 0.8), 0.3);
+        auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2), 1.0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [metal-fuzz-spheres]: <kbd>[main.cc]</kbd> 带有模糊度的金属球体]
+
+  ![<span class='num'>图像 14:</span> 模糊的金属
+  ](../images/img-1.14-metal-fuzz.png class='pixel')
+
+</div>
+
+
+
+电介质
+====================================================================================================
+像水、玻璃和钻石这样的透明材料是电介质。当光线击中它们时，它会分裂成一个反射光线和一个折射（传输）光线。我们将
+通过随机选择反射和折射来处理这个问题，每次交互只生成一个散射光线。
+
+折射
+-----------
+最难调试的部分是折射光线。我通常首先只让所有的光线折射，如果有折射光线的话。对于这个项目，我试图在我们的场景中
+放入两个玻璃球，我得到了这个（我还没有告诉你如何正确或错误地做这个，但很快就会！）：
+
+  ![<span class='num'>图像 15:</span> 玻璃首次
+  ](../images/img-1.15-glass-first.png class='pixel')
+
+这个对吗？现实生活中的玻璃球看起来很奇怪。但是，这不对。世界应该被上下颠倒，没有奇怪的黑色东西。我只是打印出
+了穿过图像中心的光线，它显然是错误的。这通常就能解决问题。
+
+斯涅尔定律
+------------
+折射是由斯涅尔定律描述的：
+
+  $ \eta \cdot \sin\theta = \eta' \cdot \sin\theta' $
+
+其中，$\theta$ 和 $\theta'$ 是从法线的角度，$\eta$ 和 $\eta'$（发音为"eta" 和 "eta prime"）是折射指数
+（通常空气 = 1.0，玻璃 = 1.3–1.7，钻石 = 2.4）。几何图形是：
+
+  ![图 [refraction]: 光线折射](../images/fig-1.17-refraction.jpg)
+
+为了确定折射光线的方向，我们必须求解 $\sin\theta'$：
+
+  $ \sin\theta' = \frac{\eta}{\eta'} \cdot \sin\theta $
+
+在表面的折射侧，有一个折射光线 $\mathbf{R'}$ 和一个法线 $\mathbf{n'}$，并且它们之间存在一个角度，$\theta'$。
+我们可以将 $\mathbf{R'}$ 分解为与 $\mathbf{n'}$ 垂直和平行的部分：
+
+  $ \mathbf{R'} = \mathbf{R'}_{\bot} + \mathbf{R'}_{\parallel} $
+
+如果我们求解 $\mathbf{R'}_{\bot}$ 和 $\mathbf{R'}_{\parallel}$，我们得到：
+
+  $ \mathbf{R'}_{\bot} = \frac{\eta}{\eta'} (\mathbf{R} + \cos\theta \mathbf{n}) $
+  $ \mathbf{R'}_{\parallel} = -\sqrt{1 - |\mathbf{R'}_{\bot}|^2} \mathbf{n} $
+
+你可以自己证明这个，但我们将把它当作事实并继续。本书的其余部分不需要你理解证明。
+
+我们知道右侧每个项的值，除了 $\cos\theta$。众所周知，两个向量的点积可以用它们之间的角度的余弦来解释：
+
+  $ \mathbf{a} \cdot \mathbf{b} = |\mathbf{a}| |\mathbf{b}| \cos\theta $
+
+如果我们限制 $\mathbf{a}$ 和 $\mathbf{b}$ 为单位向量：
+
+  $ \mathbf{a} \cdot \mathbf{b} = \cos\theta $
+
+我们现在可以用已知量重写 $\mathbf{R'}_{\bot}$：
+
+  $ \mathbf{R'}_{\bot} =
+     \frac{\eta}{\eta'} (\mathbf{R} + (\mathbf{-R} \cdot \mathbf{n}) \mathbf{n}) $
+
+<div class='together'>
+当我们将它们重新组合在一起时，我们可以写一个函数来计算 $\mathbf{R'}$：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    inline vec3 reflect(const vec3& v, const vec3& n) {
+        return v - 2*dot(v,n)*n;
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    inline vec3 refract(const vec3& uv, const vec3& n, double etai_over_etat) {
+        auto cos_theta = fmin(dot(-uv, n), 1.0);
+        vec3 r_out_perp =  etai_over_etat * (uv + cos_theta*n);
+        vec3 r_out_parallel = -sqrt(fabs(1.0 - r_out_perp.length_squared())) * n;
+        return r_out_perp + r_out_parallel;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [refract]: <kbd>[vec3.h]</kbd> 折射函数]
+
+</div>
+
+（注意这里我们使用了 C++ 标准函数 `fmin()`，它返回两个参数中的最小值。同样，我们稍后会使用 `fmax()`，它返回两个参数中的最大值。）
+
+<div class='together'>
+电介质材料总是折射：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+
+    class metal : public material {
+        ...
+    };
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    class dielectric : public material {
+      public:
+        dielectric(double index_of_refraction) : ir(index_of_refraction) {}
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            attenuation = color(1.0, 1.0, 1.0);
+            double refraction_ratio = rec.front_face ? (1.0/ir) : ir;
+
+            vec3 unit_direction = unit_vector(r_in.direction());
+            vec3 refracted = refract(unit_direction, rec.normal, refraction_ratio);
+
+            scattered = ray(rec.p, refracted);
+            return true;
+        }
+
+      private:
+        double ir; // 折射指数
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [dielectric-always-refract]: <kbd>[material.h]</kbd>
+        总是折射的电介质材料类]
+
+</div>
+
+<div class='together'>
+现在我们将更新场景，将左边和中心的球体改为玻璃：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    auto material_center = make_shared<dielectric>(1.5);
+    auto material_left   = make_shared<dielectric>(1.5);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2), 1.0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [two-glass]: <kbd>[main.cc]</kbd> 将左边和中心的球体改为玻璃]
+
+</div>
+
+<div class='together'>
+这给我们带来了以下结果：
+
+  ![<span class='num'>Image 16:</span> 总是折射的玻璃球
+  ](../images/img-1.16-glass-always-refract.png class='pixel')
+
+</div>
+
+
+
+全内反射
+--------------------------
+那肯定看起来不对。一个棘手的实际问题是，当光线在折射指数较高的材料中时，斯涅尔定律没有实数解，因此不可能有折射。
+如果我们回顾斯涅尔定律和 $\sin\theta'$ 的推导：
+
+  $ \sin\theta' = \frac{\eta}{\eta'} \cdot \sin\theta $
+
+如果光线在玻璃内部，外部是空气（$\eta = 1.5$ 和 $\eta' = 1.0$）：
+
+  $ \sin\theta' = \frac{1.5}{1.0} \cdot \sin\theta $
+
+<div class='together'>
+$\sin\theta'$ 的值不能大于 1。所以，如果，
+
+  $ \frac{1.5}{1.0} \cdot \sin\theta > 1.0 $
+
+等式的两边就不相等，解就不存在。如果解不存在，玻璃就不能折射，因此必须反射光线：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    if (refraction_ratio * sin_theta > 1.0) {
+        // 必须反射
+        ...
+    } else {
+        // 可以折射
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [dielectric-can-refract-1]: <kbd>[material.h]</kbd> 判断光线是否可以折射]
+</div>
+
+这里所有的光都被反射，因为在实践中，这通常是在实体物体内部，所以它被称为“全内反射”。这就是为什么当你被淹没时，
+水-空气界面有时会像完美的镜子一样反射。
+
+我们可以使用三角函数的性质求解 `sin_theta`：
+
+  $ \sin\theta  = \sqrt{1 - \cos^2\theta} $
+
+和
+
+  $ \cos\theta = \mathbf{R} \cdot \mathbf{n} $
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    double cos_theta = fmin(dot(-unit_direction, rec.normal), 1.0);
+    double sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+
+    if (refraction_ratio * sin_theta > 1.0) {
+        // 必须反射
+        ...
+    } else {
+        // 可以折射
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [dielectric-can-refract-2]: <kbd>[material.h]</kbd> 判断光线是否可以折射]
+
+<div class='together'>
+电介质材料总是在可能的情况下折射：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class dielectric : public material {
+      public:
+        dielectric(double index_of_refraction) : ir(index_of_refraction) {}
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            attenuation = color(1.0, 1.0, 1.0);
+            double refraction_ratio = rec.front_face ? (1.0/ir) : ir;
+
+            vec3 unit_direction = unit_vector(r_in.direction());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            double cos_theta = fmin(dot(-unit_direction, rec.normal), 1.0);
+            double sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+
+            bool cannot_refract = refraction_ratio * sin_theta > 1.0;
+            vec3 direction;
+
+            if (cannot_refract)
+                direction = reflect(unit_direction, rec.normal);
+            else
+                direction = refract(unit_direction, rec.normal, refraction_ratio);
+
+            scattered = ray(rec.p, direction);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            return true;
+        }
+
+      private:
+        double ir; // 折射指数
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [dielectric-with-refraction]: <kbd>[material.h]</kbd>
+        电介质材料类带有反射]
+
+</div>
+
+<div class='together'>
+使用这些参数，衰减总是 1 -- 玻璃表面不吸收任何东西。如果我们试试看：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
+    auto material_center = make_shared<lambertian>(color(0.1, 0.2, 0.5));
+    auto material_left   = make_shared<dielectric>(1.5);
+    auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2), 0.0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-dielectric]: <kbd>[main.cc]</kbd> 带有电介质和光滑球体的场景]
+
+</div>
+
+<div class='together'>
+我们得到：
+
+  ![<span class='num'>Image 17:</span> 有时折射的玻璃球
+  ](../images/img-1.17-glass-sometimes-refract.png class='pixel')
+
+</div>
+
+
+Schlick 近似
+----------------------
+现在，真正的玻璃的反射率随角度变化 -- 以陡峭的角度看窗户，它变成了一面镜子。有一个大而丑陋的等式，但几乎所有人
+都使用 Christophe Schlick 的一个便宜且惊人地准确的多项式近似。这就产生了我们的全玻璃材料：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class dielectric : public material {
+      public:
+        dielectric(double index_of_refraction) : ir(index_of_refraction) {}
+
+        bool scatter(const ray& r_in, const hit_record& rec, color& attenuation, ray& scattered)
+        const override {
+            attenuation = color(1.0, 1.0, 1.0);
+            double refraction_ratio = rec.front_face ? (1.0/ir) : ir;
+
+            vec3 unit_direction = unit_vector(r_in.direction());
+            double cos_theta = fmin(dot(-unit_direction, rec.normal), 1.0);
+            double sin_theta = sqrt(1.0 - cos_theta*cos_theta);
+
+            bool cannot_refract = refraction_ratio * sin_theta > 1.0;
+            vec3 direction;
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            if (cannot_refract || reflectance(cos_theta, refraction_ratio) > random_double())
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+                direction = reflect(unit_direction, rec.normal);
+            else
+                direction = refract(unit_direction, rec.normal, refraction_ratio);
+
+            scattered = ray(rec.p, direction);
+            return true;
+        }
+
+      private:
+        double ir; // 折射指数
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        static double reflectance(double cosine, double ref_idx) {
+            // 使用 Schlick 的反射近似。
+            auto r0 = (1-ref_idx) / (1+ref_idx);
+            r0 = r0*r0;
+            return r0 + (1-r0)*pow((1 - cosine),5);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [glass]: <kbd>[material.h]</kbd> 完整的玻璃材料]
+
+
+
+建模一个空心玻璃球
+-------------------------------
+一个有趣且简单的电介质球技巧是注意到，如果你使用一个负半径，几何形状不受影响，但是表面法线向内指。
+
+然而，正确处理负半径可能会有些棘手。回忆一下在列表 [sphere-material] 中的 `sphere::hit()` 一行，它计算了外向法线：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    vec3 outward_normal = (rec.p - center) / radius;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [proper-invert-sphere-normal]: 对负半径球体的正确法线处理]
+
+在你自己的实现中，你可能会被诱惑去做类似这样的事情：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    vec3 outward_normal = (rec.p - center).unit_vector();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [improper-invert-sphere-normal]:
+    对负半径球体的问题法线计算]
+
+如果你这样做，负半径的球体将无法正常工作。由于负半径的球体是一个 _气泡_，其内部是球体外的无限空间。其外部是球体内的有限气泡，所以外向法线需要指向球体中心。除以（负的）半径会翻转我们想要的法线。如果你像上面的第二个例子那样实现了你的代码，你现在可能想要修复它。
+
+让我们使用这个空心球体的技巧来建模一个具有给定厚度的球体：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    ...
+    world.add(make_shared<sphere>(point3( 0.0, -100.5, -1.0), 100.0, material_ground));
+    world.add(make_shared<sphere>(point3( 0.0,    0.0, -1.0),   0.5, material_center));
+    world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, material_left));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+    world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),  -0.4, material_left));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    world.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
+    ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-hollow-glass]: <kbd>[main.cc]</kbd> 带有空心玻璃球体的场景]
+
+<div class='together'>
+这给出了：
+
+  ![<span class='num'>Image 18:</span> 一个空心的玻璃球
+  ](../images/img-1.18-glass-hollow.png class='pixel')
+
+</div>
+
+
+
+
+可定位的相机
+====================================================================================================
+像电介质一样，相机很难调试，所以我总是逐步开发我的相机。首先，让我们允许调整视场（_fov_）。这是从渲染图像的边
+缘到边缘的视觉角度。由于我们的图像不是正方形的，所以水平和垂直的 fov 是不同的。我总是使用垂直 fov。我通常在构
+造函数内部将其指定为度数，并在内部转换为弧度 -- 这是个人口味的问题。
+
+相机视图几何
+------------------------
+首先，我们将保持光线从原点出发，指向 $z = -1$ 平面。我们可以使其成为 $z = -2$ 平面，或者任何其他平面，只要我们使 $h$ 成为到该距离的比例。这是我们的设置：
+
+  ![Figure [cam-view-geom]: 相机视图几何（从侧面看）
+  ](../images/fig-1.18-cam-view-geom.jpg)
+
+<div class='together'>
+这意味着 $h = \tan(\frac{\theta}{2})$。我们的相机现在变成了：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      public:
+        double aspect_ratio      = 1.0;  // 图像宽度与高度的比例
+        int    image_width       = 100;  // 渲染图像的像素宽度
+        int    samples_per_pixel = 10;   // 每个像素的随机采样数
+        int    max_depth         = 10;   // 场景中光线反弹的最大次数
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        double vfov = 90;  // 垂直视角（视场）
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        void render(const hittable& world) {
+        ...
+
+      private:
+        ...
+
+        void initialize() {
+            image_height = int(image_width / aspect_ratio);
+            image_height = (image_height < 1) ? 1 : image_height;
+
+            center = point3(0, 0, 0);
+
+            // 确定视口尺寸。
+            auto focal_length = 1.0;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto theta = degrees_to_radians(vfov);
+            auto h = tan(theta/2);
+            auto viewport_height = 2 * h * focal_length;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            auto viewport_width = viewport_height * (double(image_width)/image_height);
+
+            // 计算沿视口水平和垂直边缘的向量。
+            auto viewport_u = vec3(viewport_width, 0, 0);
+            auto viewport_v = vec3(0, -viewport_height, 0);
+
+            // 计算从像素到像素的水平和垂直增量向量。
+            pixel_delta_u = viewport_u / image_width;
+            pixel_delta_v = viewport_v / image_height;
+
+            // 计算左上角像素的位置。
+            auto viewport_upper_left =
+                center - vec3(0, 0, focal_length) - viewport_u/2 - viewport_v/2;
+            pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+        }
+
+        ...
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-fov]: <kbd>[camera.h]</kbd> 可调视场（fov）的相机]
+
+</div>
+
+<div class='together'>
+我们将用两个接触的球体的简单场景来测试这些更改，使用90°的视场。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        hittable_list world;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto R = cos(pi/4);
+
+        auto material_left  = make_shared<lambertian>(color(0,0,1));
+        auto material_right = make_shared<lambertian>(color(1,0,0));
+
+        world.add(make_shared<sphere>(point3(-R, 0, -1), R, material_left));
+        world.add(make_shared<sphere>(point3( R, 0, -1), R, material_right));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        camera cam;
+
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 400;
+        cam.samples_per_pixel = 100;
+        cam.max_depth         = 50;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        cam.vfov = 90;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-wide-angle]: <kbd>[main.cc]</kbd> 宽角相机的场景]
+
+</div>
+
+<div class='together'>
+这给我们带来了渲染：
+
+  ![<span class='num'>Image 19:</span> 宽角视图
+  ](../images/img-1.19-wide-view.png class='pixel')
+
+</div>
+
+
+定位和定向相机
+-------------------------------------
+为了得到一个任意的视点，让我们首先命名我们关心的点。我们将把放置相机的位置称为 _lookfrom_，我们看的点称为 _lookat_。
+（稍后，如果你愿意，你可以定义一个要看的方向，而不是一个要看的点。）
+
+我们还需要一种指定相机滚动，或者说侧向倾斜的方式：围绕 lookat-lookfrom 轴的旋转。另一种思考方式是，即使你保持
+`lookfrom` 和 `lookat` 不变，你仍然可以围绕你的鼻子旋转你的头。我们需要一种指定相机的“向上”向量的方式。
+
+  ![Figure [cam-view-dir]: 相机视图方向](../images/fig-1.19-cam-view-dir.jpg)
+
+我们可以指定任何我们想要的向上向量，只要它不平行于视图方向。将这个向上向量投影到视图方向正交的平面上，得到一个
+相机相对的向上向量。我使用常见的命名约定，将这个称为“视图向上”（_vup_）向量。经过几个叉积和向量归一化，我们现
+在有了一个完整的正交基 $(u,v,w)$ 来描述我们相机的方向。$u$ 将是指向相机右侧的单位向量，$v$ 是指向相机上方的单
+位向量，$w$ 是指向视图方向相反的单位向量（因为我们使用右手坐标系），相机中心位于原点。
+
+  ![Figure [cam-view-up]: 相机视图向上方向](../images/fig-1.20-cam-view-up.jpg)
+
+像之前一样，当我们的固定相机面向 $-Z$ 时，我们的任意视图相机面向 $-w$。请记住，我们可以 -- 但我们不必 -- 使
+用世界向上 $(0,1,0)$ 来指定 vup。这是方便的，并且会自然地保持你的相机水平，直到你决定尝试疯狂的相机角度。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      public:
+        double aspect_ratio      = 1.0;  // 图像宽度与高度的比例
+        int    image_width       = 100;  // 渲染图像的像素宽度
+        int    samples_per_pixel = 10;   // 每个像素的随机采样数
+        int    max_depth         = 10;   // 场景中光线反弹的最大次数
+
+        double vfov     = 90;              // 垂直视角（视场）
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        point3 lookfrom = point3(0,0,-1);  // 相机查看的位置
+        point3 lookat   = point3(0,0,0);   // 相机正在看的点
+        vec3   vup      = vec3(0,1,0);     // 相机相对的“向上”方向
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        ...
+
+      private:
+        int    image_height;   // 渲染图像的高度
+        point3 center;         // 相机中心
+        point3 pixel00_loc;    // 0, 0 像素的位置
+        vec3   pixel_delta_u;  // 向右的像素偏移
+        vec3   pixel_delta_v;  // 下方的像素偏移
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        vec3   u, v, w;        // 相机坐标系的基向量
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        void initialize() {
+            image_height = int(image_width / aspect_ratio);
+            image_height = (image_height < 1) ? 1 : image_height;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            center = lookfrom;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            // 确定视口尺寸。
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto focal_length = (lookfrom - lookat).length();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            auto theta = degrees_to_radians(vfov);
+            auto h = tan(theta/2);
+            auto viewport_height = 2 * h * focal_length;
+            auto viewport_width = viewport_height * (double(image_width)/image_height);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            // 计算相机坐标系的 u,v,w 单位基向量。
+            w = unit_vector(lookfrom - lookat);
+            u = unit_vector(cross(vup, w));
+            v = cross(w, u);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            // 计算沿视口水平和垂直边缘的向量。
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            vec3 viewport_u = viewport_width * u;    // 视口水平边缘的向量
+            vec3 viewport_v = viewport_height * -v;  // 视口垂直边缘的向量
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            // 计算从像素到像素的水平和垂直增量向量。
+            pixel_delta_u = viewport_u / image_width;
+            pixel_delta_v = viewport_v / image_height;
+
+            // 计算左上角像素的位置。
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto viewport_upper_left = center - (focal_length * w) - viewport_u/2 - viewport_v/2;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+        }
+
+        ...
+
+      private:
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-orient]: <kbd>[camera.h]</kbd> 可定位和可定向的相机]
+
+<div class='together'>
+我们将回到之前的场景，并使用新的视点：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        hittable_list world;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        auto material_ground = make_shared<lambertian>(color(0.8, 0.8, 0.0));
+        auto material_center = make_shared<lambertian>(color(0.1, 0.2, 0.5));
+        auto material_left   = make_shared<dielectric>(1.5);
+        auto material_right  = make_shared<metal>(color(0.8, 0.6, 0.2), 0.0);
+
+        world.add(make_shared<sphere>(point3( 0.0, -100.5, -1.0), 100.0, material_ground));
+        world.add(make_shared<sphere>(point3( 0.0,    0.0, -1.0),   0.5, material_center));
+        world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),   0.5, material_left));
+        world.add(make_shared<sphere>(point3(-1.0,    0.0, -1.0),  -0.4, material_left));
+        world.add(make_shared<sphere>(point3( 1.0,    0.0, -1.0),   0.5, material_right));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        camera cam;
+
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 400;
+        cam.samples_per_pixel = 100;
+        cam.max_depth         = 50;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        cam.vfov     = 90;
+        cam.lookfrom = point3(-2,2,1);
+        cam.lookat   = point3(0,0,-1);
+        cam.vup      = vec3(0,1,0);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-free-view]: <kbd>[main.cc]</kbd> 具有替代视点的场景]
+
+</div>
+
+<div class='together'>
+得到：
+
+  ![<span class='num'>Image 20:</span> 远景
+  ](../images/img-1.20-view-distant.png class='pixel')
+
+</div>
+
+<div class='together'>
+我们可以改变视场：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        cam.vfov     = 20;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [change-field-view]: <kbd>[main.cc]</kbd> 改变视场]
+
+</div>
+
+<div class='together'>
+得到：
+
+  ![<span class='num'>Image 21:</span> 放大](../images/img-1.21-view-zoom.png class='pixel')
+
+</div>
+
+
+
+失焦模糊
+====================================================================================================
+现在我们的最后一个特性：_失焦模糊_。注意，摄影师称之为_景深_，所以请确保只在你的光线追踪朋友中使用_失焦模糊_这个术语。
+
+我们在真实相机中有失焦模糊的原因是因为它们需要一个大孔（而不仅仅是一个针孔）来收集光线。一个大孔会使所有东西失焦，
+但如果我们在胶片/传感器前面放一个镜头，那么会有一个特定的距离在那里所有东西都在焦点上。放置在那个距离的物体将会
+出现在焦点上，并且它们离那个距离越远，看起来就越模糊。你可以这样想象一个镜头：所有来自焦点距离的特定点的光线
+-- 并且击中了镜头 -- 将会被弯回到图像传感器上的一个单一点。
+
+我们称相机中心和所有东西都完美对焦的平面之间的距离为_焦距_。请注意，焦距通常不同于焦点距离 -- _焦点距离_是相机
+中心和图像平面之间的距离。然而，对于我们的模型，这两者将具有相同的值，因为我们将把我们的像素网格直接放在离相机
+中心_焦距_的焦点平面上。
+
+在物理相机中，焦距是由镜头和胶片/传感器之间的距离控制的。这就是为什么当你改变焦点时，你会看到镜头相对于相机移动
+（这可能也会在你的手机相机中发生，但是传感器会移动）。"光圈"是一个孔，用来控制镜头的有效大小。对于真实的相机，
+如果你需要更多的光，你就会使光圈变大，并且会得到更多的对焦距离之外的物体的模糊。对于我们的虚拟相机，我们可以有一
+个完美的传感器，永远不需要更多的光，所以我们只在我们想要失焦模糊时使用光圈。
+
+
+薄透镜近似
+--------------------------
+真实的相机有一个复杂的复合镜头。对于我们的代码，我们可以模拟顺序：传感器，然后是镜头，然后是光圈。然后我们可以计
+算出在哪里发送光线，并在图像计算完成后翻转图像（图像在胶片上投影是倒置的）。然而，图形人员通常使用薄透镜近似：
+
+  ![Figure [cam-lens]: 相机镜头模型](../images/fig-1.21-cam-lens.jpg)
+
+我们不需要模拟相机内部的任何东西 -- 对于渲染相机外部的图像来说，那将是不必要的复杂性。相反，我通常从一个无限薄的
+圆形"镜头"开始发射光线，并将它们发送到焦点平面上的感兴趣的像素（离镜头`focal_length`远），在那个平面上，3D世界
+中的所有东西都在完美的焦点上。
+
+在实践中，我们通过将视口放在这个平面上来实现这一点。将所有的东西放在一起：
+
+  1. 焦点平面与相机视图方向正交。
+  2. 焦距是相机中心和焦点平面之间的距离。
+  3. 视口位于焦点平面上，以相机视图方向向量为中心。
+  4. 像素位置的网格位于视口内（位于3D世界中）。
+  5. 从当前像素位置周围的区域中选择随机图像采样位置。
+  6. 相机从镜头上的随机点发射光线，通过当前图像采样位置。
+
+  ![Figure [cam-film-plane]: 相机焦点平面](../images/fig-1.22-cam-film-plane.jpg)
+
+
+生成采样光线
+-----------------------
+没有失焦模糊，所有的场景光线都从相机中心（或`lookfrom`）发出。为了实现失焦模糊，我们在相机中心构造一个圆盘。
+半径越大，失焦模糊越大。你可以把我们原来的相机想象成一个失焦盘的半径为零（完全没有模糊），所以所有的光线都从
+盘中心（`lookfrom`）发出。
+
+那么，失焦盘应该有多大呢？由于这个盘的大小控制了我们得到多少失焦模糊，那应该是相机类的一个参数。我们可以只把
+盘的半径作为一个相机参数，但是模糊会根据投影距离而变化。一个稍微容易一点的参数是指定顶点在视口中心，基底（失焦盘）
+在相机中心的锥体的角度。这应该会给你更一致的结果，当你为给定的镜头改变焦距时。
+
+由于我们将从失焦盘中选择随机点，我们需要一个函数来做到这一点：`random_in_unit_disk()`。这个函数使用我们在
+`random_in_unit_sphere()`中使用的同样的方法，只是对于两个维度。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    inline vec3 unit_vector(const vec3& u) {
+        return v / v.length();
+    }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+    inline vec3 random_in_unit_disk() {
+        while (true) {
+            auto p = vec3(random_double(-1,1), random_double(-1,1), 0);
+            if (p.length_squared() < 1)
+                return p;
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [rand-in-unit-disk]: <kbd>[vec3.h]</kbd> 在单位盘内生成随机点]
+
+现在让我们更新相机，使光线从失焦盘发出：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+      public:
+        double aspect_ratio      = 1.0;  // 图像宽度与高度的比例
+        int    image_width       = 100;  // 渲染图像的宽度，以像素计
+        int    samples_per_pixel = 10;   // 每个像素的随机采样数
+        int    max_depth         = 10;   // 场景中光线反弹的最大次数
+
+        double vfov     = 90;              // 垂直视角（视场）
+        point3 lookfrom = point3(0,0,-1);  // 相机的观察点
+        point3 lookat   = point3(0,0,0);   // 相机的观察目标
+        vec3   vup      = vec3(0,1,0);     // 相机相对的"上"方向
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        double defocus_angle = 0;  // 通过每个像素的光线的变化角度
+        double focus_dist = 10;    // 从相机观察点到完美对焦平面的距离
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        ...
+
+      private:
+        int    image_height;    // 渲染图像的高度
+        point3 center;          // 相机中心
+        point3 pixel00_loc;     // 像素0,0的位置
+        vec3   pixel_delta_u;   // 到右边像素的偏移
+        vec3   pixel_delta_v;   // 到下面像素的偏移
+        vec3   u, v, w;         // 相机坐标系的基向量
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        vec3   defocus_disk_u;  // 失焦盘的水平半径
+        vec3   defocus_disk_v;  // 失焦盘的垂直半径
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        void initialize() {
+            image_height = int(image_width / aspect_ratio);
+            image_height = (image_height < 1) ? 1 : image_height;
+
+            center = lookfrom;
+
+            // 确定视口的尺寸。
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ delete
+            auto focal_length = (lookfrom - lookat).length();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            auto theta = degrees_to_radians(vfov);
+            auto h = tan(theta/2);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto viewport_height = 2 * h * focus_dist;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            auto viewport_width = viewport_height * (double(image_width)/image_height);
+
+            // 计算相机坐标系的u,v,w单位基向量。
+            w = unit_vector(lookfrom - lookat);
+            u = unit_vector(cross(vup, w));
+            v = cross(w, u);
+
+            // 计算视口水平和垂直边缘的向量。
+            vec3 viewport_u = viewport_width * u;    // 视口水平边缘的向量
+            vec3 viewport_v = viewport_height * -v;  // 视口垂直边缘的向量
+
+            // 计算到下一个像素的水平和垂直delta向量。
+            pixel_delta_u = viewport_u / image_width;
+            pixel_delta_v = viewport_v / image_height;
+
+            // 计算左上角像素的位置。
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto viewport_upper_left = center - (focus_dist * w) - viewport_u/2 - viewport_v/2;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            // 计算相机失焦盘的基向量。
+            auto defocus_radius = focus_dist * tan(degrees_to_radians(defocus_angle / 2));
+            defocus_disk_u = u * defocus_radius;
+            defocus_disk_v = v * defocus_radius;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        }
+
+        ray get_ray(int i, int j) const {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            // 获取像素位置i,j的随机采样相机光线，起源于相机的失焦盘。
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+            auto pixel_center = pixel00_loc + (i * pixel_delta_u) + (j * pixel_delta_v);
+            auto pixel_sample = pixel_center + pixel_sample_square();
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+            auto ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+            auto ray_direction = pixel_sample - ray_origin;
+
+            return ray(ray_origin, ray_direction);
+        }
+
+        vec3 pixel_sample_square() const {
+            ...
+        }
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        point3 defocus_disk_sample() const {
+            // 返回相机失焦盘中的一个随机点。
+            auto p = random_in_unit_disk();
+            return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        color ray_color(const ray& r, int depth, const hittable& world) const {
+            ...
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [camera-dof]: <kbd>[camera.h]</kbd> 具有可调景深（dof）的相机]
+
+<div class='together'>
+使用大光圈：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        ...
+
+        camera cam;
+
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 400;
+        cam.samples_per_pixel = 100;
+        cam.max_depth         = 50;
+
+        cam.vfov     = 20;
+        cam.lookfrom = point3(-2,2,1);
+        cam.lookat   = point3(0,0,-1);
+        cam.vup      = vec3(0,1,0);
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        cam.defocus_angle = 10.0;
+        cam.focus_dist    = 3.4;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-camera-dof]: <kbd>[main.cc]</kbd> 具有景深的场景相机]
+
+</div>
+
+<div class='together'>
+我们得到：
+
+  ![<span class='num'>Image 22:</span> 具有景深的球体
+  ](../images/img-1.22-depth-of-field.png class='pixel')
+
+</div>
+
+
+
+接下来去哪里？
+====================================================================================================
+
+最终的渲染
+---------------
+让我们制作这本书封面上的图像 -- 许多随机的球体。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    int main() {
+        hittable_list world;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+        auto ground_material = make_shared<lambertian>(color(0.5, 0.5, 0.5));
+        world.add(make_shared<sphere>(point3(0,-1000,0), 1000, ground_material));
+
+        for (int a = -11; a < 11; a++) {
+            for (int b = -11; b < 11; b++) {
+                auto choose_mat = random_double();
+                point3 center(a + 0.9*random_double(), 0.2, b + 0.9*random_double());
+
+                if ((center - point3(4, 0.2, 0)).length() > 0.9) {
+                    shared_ptr<material> sphere_material;
+
+                    if (choose_mat < 0.8) {
+                        // diffuse
+                        auto albedo = color::random() * color::random();
+                        sphere_material = make_shared<lambertian>(albedo);
+                        world.add(make_shared<sphere>(center, 0.2, sphere_material));
+                    } else if (choose_mat < 0.95) {
+                        // metal
+                        auto albedo = color::random(0.5, 1);
+                        auto fuzz = random_double(0, 0.5);
+                        sphere_material = make_shared<metal>(albedo, fuzz);
+                        world.add(make_shared<sphere>(center, 0.2, sphere_material));
+                    } else {
+                        // glass
+                        sphere_material = make_shared<dielectric>(1.5);
+                        world.add(make_shared<sphere>(center, 0.2, sphere_material));
+                    }
+                }
+            }
+        }
+
+        auto material1 = make_shared<dielectric>(1.5);
+        world.add(make_shared<sphere>(point3(0, 1, 0), 1.0, material1));
+
+        auto material2 = make_shared<lambertian>(color(0.4, 0.2, 0.1));
+        world.add(make_shared<sphere>(point3(-4, 1, 0), 1.0, material2));
+
+        auto material3 = make_shared<metal>(color(0.7, 0.6, 0.5), 0.0);
+        world.add(make_shared<sphere>(point3(4, 1, 0), 1.0, material3));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        camera cam;
+
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ Highlight
+        cam.aspect_ratio      = 16.0 / 9.0;
+        cam.image_width       = 1200;
+        cam.samples_per_pixel = 500;
+        cam.max_depth         = 50;
+
+        cam.vfov     = 20;
+        cam.lookfrom = point3(13,2,3);
+        cam.lookat   = point3(0,0,0);
+        cam.vup      = vec3(0,1,0);
+
+        cam.defocus_angle = 0.6;
+        cam.focus_dist    = 10.0;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
+        cam.render(world);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [scene-final]: <kbd>[main.cc]</kbd> 最终场景]
+
+(注意，上述代码与项目示例代码略有不同：上面的 `samples_per_pixel` 设置为500，以获得质量较高的图像，但渲染
+时间会比较长。示例代码中使用的值为10，以便在开发和验证过程中保持合理的运行时间。)
+
+<div class='together'>
+这将得到：
+
+  ![<span class='num'>Image 23:</span> 最终场景](../images/img-1.23-book1-final.jpg)
+
+</div>
+
+你可能会注意到一个有趣的事情，那就是玻璃球并没有真正的阴影，这使得它们看起来像是在漂浮。这不是一个错误 -- 在现实生活中，
+你很少看到玻璃球，它们看起来也有点奇怪，确实在阴天时似乎在漂浮。一个在玻璃球下的大球上的点仍然有很多光线照射到，
+因为天空是重新排序的，而不是被阻挡的。
+
+
+下一步
+-----------
+你现在有了一个很酷的光线追踪器！接下来做什么呢？
+
+
+### 第二本书：_光线追踪：下一周_
+这本系列的第二本书在你这里开发的光线追踪器的基础上进行构建。这包括新的特性，如：
+
+  - 运动模糊 -- 真实地渲染移动的物体。
+  - 边界体积层次 -- 加速复杂场景的渲染。
+  - 纹理映射 -- 在物体上放置图像。
+  - Perlin噪声 -- 一个对许多技术非常有用的随机噪声生成器。
+  - 四边形 -- 除了球体之外的渲染对象！也是实现磁盘、三角形、环或任何其他2D基元的基础。
+  - 灯光 -- 在你的场景中添加光源。
+  - 变换 -- 对于放置和旋转物体非常有用。
+  - 体积渲染 -- 渲染烟雾、云和其他气体体积。
+
+
+### 第三本书：_光线追踪：你的余生_
+这本书再次扩展了第二本书的内容。这本书的很大一部分是关于提高渲染图像的质量和渲染器的性能，并专注于生成 _正确_ 的光线并适当地累积它们。
+
+这本书是为那些对编写专业级光线追踪器，和/或对实现高级效果如次表面散射或嵌套电介质的基础感兴趣的读者准备的。
+
+
+### 其他方向
+从这里开始，你可以采取许多额外的方向，包括我们在这个系列中还没有（还？）涵盖的技术。这些包括：
+
+**三角形** -- 大多数酷炫的模型都是以三角形的形式存在。模型I/O是最糟糕的，几乎每个人都试图获取别人的代码来做这个。
+这也包括有效地处理大量的三角形 _网格_，这本身就带来了自己的挑战。
+
+**并行** -- 在 $N$ 个核心上运行你的代码的 $N$ 个副本，每个副本使用不同的随机种子。平均这 $N$ 次运行。这种平均也
+可以在层次上进行，其中 $N/2$ 对可以平均得到 $N/4$ 个图像，然后这些对可以被平均。这种并行方法应该能很好地扩展到数
+千个核心，而编码量非常小。
+
+**阴影光线** -- 当向光源发射光线时，你可以准确地确定一个特定点是如何被阴影覆盖的。有了这个，你可以渲染出清晰或柔
+和的阴影，为你的场景增加另一种现实感。
+
+祝你玩得开心，如果有好看的图像，请发给我！
+
+
+
+                               (insert acknowledgments.md.html here)
+
+
+
+
+引用本书
+====================================================================================================
+一致的引用使得更容易识别这项工作的来源、位置和版本。如果你在引用本书，我们请求你尽可能使用以下形式之一。
+
+基本数据
+-----------
+  - **系列标题**：“Ray Tracing in One Weekend Series”
+  - **书籍标题**：“Ray Tracing in One Weekend”
+  - **作者**：Peter Shirley, Trevor David Black, Steve Hollasch
+  - **版本/版次**：v4.0.0-alpha.2
+  - **日期**：2023-XX-XX
+  - **系列URL**：https://raytracing.github.io/
+  - **书籍URL**：https://raytracing.github.io/books/RayTracingInOneWeekend.html
+
+片段
+---------
+
+
+  ### Markdown
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [_Ray Tracing in One Weekend_](https://raytracing.github.io/books/RayTracingInOneWeekend.html)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  ### HTML
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    <a href='https://raytracing.github.io/books/RayTracingInOneWeekend.html'>
+        <cite>Ray Tracing in One Weekend</cite>
+    </a>
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  ### LaTeX and BibTex
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ~\cite{Shirley2023RTW1}
+
+    @misc{Shirley2023RTW1,
+       title = {Ray Tracing in One Weekend},
+       author = {Peter Shirley, Trevor David Black, Steve Hollasch},
+       year = {2023},
+       month = {XXX},
+       note = {\small \texttt{https://raytracing.github.io/books/RayTracingInOneWeekend.html}},
+       url = {https://raytracing.github.io/books/RayTracingInOneWeekend.html}
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  ### BibLaTeX
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    \usepackage{biblatex}
+
+    ~\cite{Shirley2023RTW1}
+
+    @online{Shirley2023RTW1,
+       title = {Ray Tracing in One Weekend},
+       author = {Peter Shirley, Trevor David Black, Steve Hollasch},
+       year = {2023},
+       month = {XXX},
+       url = {https://raytracing.github.io/books/RayTracingInOneWeekend.html}
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  ### IEEE
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    “Ray Tracing in One Weekend.” raytracing.github.io/books/RayTracingInOneWeekend.html
+    (accessed MMM. DD, YYYY)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  ### MLA:
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Ray Tracing in One Weekend. raytracing.github.io/books/RayTracingInOneWeekend.html
+    Accessed DD MMM. YYYY.
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+[Peter Shirley]:      https://github.com/petershirley
+[Steve Hollasch]:     https://github.com/hollasch
+[Trevor David Black]: https://github.com/trevordblack
+
+[discussions]:        https://github.com/RayTracing/raytracing.github.io/discussions/
+[gfx-codex]:          https://graphicscodex.com/
+[releases]:           https://github.com/RayTracing/raytracing.github.io/releases/
+[repo]:               https://github.com/RayTracing/raytracing.github.io/
+[square-pixels]:      https://www.researchgate.net/publication/244986797
+
+
+
+<!-- Markdeep: https://casual-effects.com/markdeep/ -->
+<link rel='stylesheet' href='../style/book.css'>
+<style class="fallback">body{visibility:hidden;white-space:pre;font-family:monospace}</style>
+<script src="markdeep.min.js"></script>
+<script src="https://morgan3d.github.io/markdeep/latest/markdeep.min.js"></script>
+<script>window.alreadyProcessedMarkdeep||(document.body.style.visibility="visible")</script>

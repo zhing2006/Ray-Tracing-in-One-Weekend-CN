@@ -1,3 +1,7 @@
+<p align="right">
+   <strong>English</strong> | <a href="./README_CN.md">中文</a>
+</p>
+
 Ray Tracing in One Weekend Book Series
 ====================================================================================================
 
