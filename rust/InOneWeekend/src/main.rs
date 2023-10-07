@@ -1,6 +1,13 @@
 pub mod vec3;
 pub mod color;
 pub mod ray;
+pub mod hittable;
+pub mod sphere;
+pub mod hittable_list;
+pub mod rtweekend;
+pub mod interval;
+
+use std::rc::Rc;
 
 use vec3::{
   Vec3,
@@ -8,8 +15,20 @@ use vec3::{
 };
 use color::Color;
 use ray::Ray;
+use sphere::Sphere;
+use hittable::{
+  HitRecord,
+  Hittable,
+};
+use hittable_list::HittableList;
+use interval::Interval;
 
-fn ray_color(r: &Ray) -> Color {
+fn ray_color(r: &Ray, world: &dyn Hittable) -> Color {
+  let mut rec = HitRecord::default();
+  if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
+    return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
+  }
+
   let unit_direction = vec3::unit_vector(r.direction());
   let a = 0.5 * (unit_direction.y() + 1.0);
   (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
@@ -23,6 +42,17 @@ fn main() {
   // 计算图像高度，并确保至少为1。
   let image_height = (image_width as f64 / aspect_ratio) as i32;
   let image_height = if image_height < 1 { 1 } else { image_height };
+
+  // World
+  let mut world = HittableList::default();
+  world.add(Rc::new(Sphere::new(
+    &Point3::new(0.0, 0.0, -1.0),
+    0.5,
+  )));
+  world.add(Rc::new(Sphere::new(
+    &Point3::new(0.0, -100.5, -1.0),
+    100.0,
+  )));
 
   // Camera
   let focal_length = 1.0;
@@ -54,7 +84,7 @@ fn main() {
       let ray_direction = pixel_center - camera_center;
       let r = Ray::new(&camera_center, &ray_direction);
 
-      let pixel_color = ray_color(&r);
+      let pixel_color = ray_color(&r, &world);
       pixel_color.write_color(&mut stdout.lock()).unwrap();
     }
   }

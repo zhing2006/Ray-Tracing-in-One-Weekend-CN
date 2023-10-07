@@ -452,3 +452,483 @@ fn ray_color(r: &Ray) -> Color {
 _[main.rs] 渲染一个蓝白渐变_
 
 ![Image 2: 根据射线的Y坐标产生蓝白渐变](../../images/img-1.02-blue-to-white.png)
+
+## 添加一个球体
+
+### 射线-球体相交
+
+```rust
++fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> bool {
++   let oc = *center - *r.origin();
++   let a = vec3::dot(r.direction(), r.direction());
++   let b = -2.0 * vec3::dot(r.direction(), &oc);
++   let c = vec3::dot(&oc, &oc) - radius * radius;
++   let discriminant = b * b - 4.0 * a * c;
++   discriminant >= 0.0
++}
+
+fn ray_color(r: &Ray) -> Color {
++   if hit_sphere(&Point3::new(0.0, 0.0, -1.0), 0.5, r) {
++       return Color::new(1.0, 0.0, 0.0);
++   }
++
+    let unit_direction = vec3::unit_vector(r.direction());
+    let a = 0.5 * (unit_direction.y() + 1.0);
+    (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+}
+```
+_[main.rs] 渲染一个红球_
+
+![Image 3: 一个简单的红球](../../images/img-1.03-red-sphere.png)
+
+## 表面法线和多个物体
+
+### 使用表面法线进行着色
+
+```rust
++fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
+    let oc = *center - *r.origin();
+    let a = vec3::dot(r.direction(), r.direction());
+    let b = -2.0 * vec3::dot(r.direction(), &oc);
+    let c = vec3::dot(&oc, &oc) - radius * radius;
+    let discriminant = b * b - 4.0 * a * c;
+
++   if discriminant < 0.0 {
++       -1.0
++   } else {
++       (-b - discriminant.sqrt()) / (2.0 * a)
++   }
+}
+
+fn ray_color(r: &Ray) -> Color {
++   let t = hit_sphere(&Point3::new(0.0, 0.0, -1.0), 0.5, r);
++   if t > 0.0 {
++       let n = vec3::unit_vector(&(r.at(t) - Vec3::new(0.0, 0.0, -1.0)));
++       return 0.5 * Color::new(n.x() + 1.0, n.y() + 1.0, n.z() + 1.0);
++   }
+
+    let unit_direction = vec3::unit_vector(r.direction());
+    let a = 0.5 * (unit_direction.y() + 1.0);
+    (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+}
+```
+_[main.rs] 在球体上渲染表面法线_
+
+![Image 4: 根据其法线向量着色的球体](../../images/img-1.04-normals-sphere.png)
+
+### 简化射线与球体相交代码
+
+```rust
+fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
+    let oc = *center - *r.origin();
+    let a = vec3::dot(r.direction(), r.direction());
+    let b = -2.0 * vec3::dot(r.direction(), &oc);
+    let c = vec3::dot(&oc, &oc) - radius * radius;
+    let discriminant = b * b - 4.0 * a * c;
+
+    if discriminant < 0.0 {
+        -1.0
+    } else {
+        (-b - discriminant.sqrt()) / (2.0 * a)
+    }
+}
+```
+_[main.rs] 射线与球体相交代码（之前）_
+
+```rust
+fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
+    let oc = *center - *r.origin();
++   let a = r.direction().length_squared();
++   let h = vec3::dot(r.direction(), &oc);
++   let c = oc.length_squared() - radius * radius;
++   let discriminant = h * h - a * c;
+
+    if discriminant < 0.0 {
+        -1.0
+    } else {
++       (h - discriminant.sqrt()) / a
+    }
+}
+```
+_[main.rs] 射线与球体相交代码（之后）_
+
+### 一个可命中物体的抽象类
+
+```rust
+use super::vec3::{self, Vec3, Point3};
+use super::ray::Ray;
+
+pub struct HitRecord {
+    pub p: Point3,
+    pub normal: Vec3,
+    pub t: f64,
+}
+
+pub trait Hittable {
+    fn hit(&self, r: &Ray, ray_tmin: f64, ray_tmax: f64, hit_record: &mut HitRecord) -> bool;
+}
+```
+_[hittable.rs] 可命中类_
+
+```rust
+use super::vec3::{
+  self,
+  Point3,
+};
+use super::ray::Ray;
+use super::hittable::{
+  HitRecord,
+  Hittable,
+};
+
+pub struct Sphere {
+  center: Point3,
+  radius: f64,
+}
+
+impl Sphere {
+  pub fn new(center: &Point3, radius: f64) -> Self {
+    Self {
+      center: *center,
+      radius,
+    }
+  }
+}
+
+impl Hittable for Sphere {
+    fn hit(&self, r: &Ray, ray_tmin: f64, ray_tmax: f64, hit_record: &mut HitRecord) -> bool {
+        let oc = self.center - *r.origin();
+        let a = r.direction().length_squared();
+        let h = vec3::dot(r.direction(), &oc);
+        let c = oc.length_squared() - self.radius * self.radius;
+
+        let discriminant = h * h - a * c;
+        if discriminant < 0.0 {
+            return false;
+        }
+        let sqrtd = discriminant.sqrt();
+
+        // Find the nearest root that lies in the acceptable range.
+        let mut root = (h - sqrtd) / a;
+        if root <= ray_tmin || ray_tmax <= root {
+            root = (h + sqrtd) / a;
+            if root <= ray_tmin || ray_tmax <= root {
+                return false;
+            }
+        }
+
+        hit_record.t = root;
+        hit_record.p = r.at(hit_record.t);
+        hit_record.normal = (hit_record.p - self.center) / self.radius;
+
+        true
+    }
+}
+```
+_[sphere.rs] 球体类_
+
+### 正面和背面
+
+```rust
+pub struct HitRecord {
+    pub p: Point3,
+    pub normal: Vec3,
+    pub t: f64,
++   pub front_face: bool,
+}
+
++impl HitRecord {
++   pub fn set_face_normal(&mut self, r: &Ray, outward_normal: &Vec3) {
++       // Sets the hit record normal vector.
++       // NOTE: the parameter `outward_normal` is assumed to have unit length.
++
++       self.front_face = vec3::dot(r.direction(), outward_normal) < 0.0;
++       self.normal = if self.front_face {
++           *outward_normal
++       } else {
++           -*outward_normal
++       };
++   }
++}
+```
+_[hittable.rs] 向hit_record添加正面跟踪_
+
+```rust
+impl Hittable for Sphere {
+    fn hit(&self, r: &Ray, ray_tmin: f64, ray_tmax: f64, hit_record: &mut HitRecord) -> bool {
+        ...
+
+        hit_record.t = root;
+        hit_record.p = r.at(hit_record.t);
++       let outward_normal = (hit_record.p - self.center) / self.radius;
++       hit_record.set_face_normal(r, &outward_normal);
+
+        true
+    }
+}
+```
+_[sphere.rs] 具有法线确定的球体类_
+
+### 可击中对象列表
+
+```rust
+use std::rc::Rc;
+
+use super::hittable::{
+    HitRecord,
+    Hittable,
+};
+use super::ray::Ray;
+
+#[derive(Default)]
+pub struct HittableList {
+    pub objects: Vec<Rc<dyn Hittable>>,
+}
+
+impl HittableList {
+    pub fn new(object: Rc<dyn Hittable>) -> Self {
+        Self {
+            objects: vec![object],
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.objects.clear();
+    }
+
+    pub fn add(&mut self, object: Rc<dyn Hittable>) {
+        self.objects.push(object);
+    }
+
+    pub fn hit(&self, r: &Ray, ray_tmin: f64, ray_tmax: f64, rec: &mut HitRecord) -> bool {
+        let mut temp_rec = HitRecord::default();
+        let mut hit_anything = false;
+        let mut closest_so_far = ray_tmax;
+
+        for object in self.objects.iter() {
+            if object.hit(r, ray_tmin, closest_so_far, &mut temp_rec) {
+                hit_anything = true;
+                closest_so_far = temp_rec.t;
+                *rec = temp_rec.clone();
+            }
+        }
+
+        hit_anything
+    }
+}
+```
+_[hittable_list.rs] hittable_list类_
+
+### 常用常量和实用函数
+
+```rust
+pub const INFINITY: f64 = std::f64::INFINITY;
+pub const PI: f64 = std::f64::consts::PI;
+
+pub fn degrees_to_radians(degrees: f64) -> f64 {
+  degrees * PI / 180.0
+}
+```
+_[rtweekend.rs] rtweekend.h通用头文件_
+
+```rust
+pub mod vec3;
+pub mod color;
+pub mod ray;
++pub mod hittable;
++pub mod sphere;
++pub mod hittable_list;
++pub mod rtweekend;
++
++use std::rc::Rc;
+
+use vec3::{
+    Vec3,
+    Point3,
+};
+use color::Color;
+use ray::Ray;
++use sphere::Sphere;
++use hittable::{
++   HitRecord,
++   Hittable,
++};
++use hittable_list::HittableList;
+
+-fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> bool {
+-   ...
+-}
+
++fn ray_color(r: &Ray, world: &dyn Hittable) -> Color {
++   let mut rec = HitRecord::default();
++   if world.hit(r, 0.0, rtweekend::INFINITY, &mut rec) {
++       return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
++   }
+
+    let unit_direction = vec3::unit_vector(r.direction());
+    let a = 0.5 * (unit_direction.y() + 1.0);
+    (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+}
+
+fn main() {
+    // Image
+    let aspect_ratio = 16.0 / 9.0;
+    let image_width = 400;
+
+    // 计算图像高度，并确保至少为1。
+    let image_height = (image_width as f64 / aspect_ratio) as i32;
+    let image_height = if image_height < 1 { 1 } else { image_height };
+
++   // World
++   let mut world = HittableList::default();
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(0.0, 0.0, -1.0),
++       0.5,
++   )));
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(0.0, -100.5, -1.0),
++       100.0,
++   )));
++
+    // Camera
+    let focal_length = 1.0;
+    let viewport_height = 2.0;
+    let viewport_width = viewport_height * (image_width as f64 / image_height as f64);
+    let camera_center = Point3::default();
+
+    // 计算水平和垂直视口边缘上的向量。
+    let viewport_u = Vec3::new(viewport_width, 0.0, 0.0);
+    let viewport_v = Vec3::new(0.0, -viewport_height, 0.0);
+
+    // 计算从像素到像素的水平和垂直增量向量。
+    let pixel_delta_u = viewport_u / image_width as f64;
+    let pixel_delta_v = viewport_v / image_height as f64;
+
+    // 计算左上角像素的位置。
+    let viewport_upper_left = camera_center
+        - Vec3::new(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
+    let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+
+    // Render
+    println!("P3\n{} {}\n255", image_width, image_height);
+    let stdout = std::io::stdout();
+
+    for j in 0..image_height {
+        eprintln!("\rScanlines remaining: {}", image_height - j);
+        for i in 0..image_width {
+            let pixel_center = pixel00_loc + i as f64 * pixel_delta_u + j as f64 * pixel_delta_v;
+            let ray_direction = pixel_center - camera_center;
+            let r = Ray::new(&camera_center, &ray_direction);
+
++           let pixel_color = ray_color(&r, &world);
+            pixel_color.write_color(&mut stdout.lock()).unwrap();
+        }
+    }
+
+    eprintln!("\nDone.");
+}
+```
+_[main.rs] 带有hittables的新主函数_
+
+![Image 5: 带有地面的法线着色球体的渲染结果](../../images/img-1.05-normals-sphere-ground.png)
+
+### 一个区间类
+
+```rust
+use super::rtweekend;
+
+#[derive(Default)]
+pub struct Interval {
+    pub min: f64,
+    pub max: f64,
+}
+
+impl Interval {
+    pub fn new(min: f64, max: f64) -> Self {
+        Self { min, max }
+    }
+
+    pub fn size(&self) -> f64 {
+        self.max - self.min
+    }
+
+    pub fn contains(&self, x: f64) -> bool {
+        self.min <= x && x <= self.max
+    }
+
+    pub fn surrounds(&self, x: f64) -> bool {
+        self.min < x && x < self.max
+    }
+}
+
+pub const EMPTY: Interval = Interval {
+    min: rtweekend::INFINITY,
+    max: -rtweekend::INFINITY,
+};
+pub const UNIVERSE: Interval = Interval {
+    min: -rtweekend::INFINITY,
+    max: rtweekend::INFINITY,
+};
+```
+_[interval.rs] 介绍新的区间类_
+
+```rust
+pub trait Hittable {
++   fn hit(&self, r: &Ray, ray_t: &Interval, hit_record: &mut HitRecord) -> bool;
+}
+```
+_[hittable.rs] 使用区间的hittable::hit()_
+
+```rust
+impl Hittable for HittableList {
++   fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
+        let mut temp_rec = HitRecord::default();
+        let mut hit_anything = false;
++       let mut closest_so_far = ray_t.max;
+
+        for object in self.objects.iter() {
++           if object.hit(r, &Interval::new(ray_t.min, closest_so_far), &mut temp_rec) {
+                hit_anything = true;
+                closest_so_far = temp_rec.t;
+                *rec = temp_rec.clone();
+            }
+        }
+
+        hit_anything
+    }
+}
+```
+_[hittable_list.rs] 使用区间的hittable_list::hit()_
+
+```rust
+impl Hittable for Sphere {
++   fn hit(&self, r: &Ray, ray_t: &Interval, hit_record: &mut HitRecord) -> bool {
+        ...
+
+        // Find the nearest root that lies in the acceptable range.
+        let mut root = (h - sqrtd) / a;
++       if !ray_t.surrounds(root) {
+            root = (h + sqrtd) / a;
++           if !ray_t.surrounds(root) {
+                return false;
+            }
+        }
+        ...
+    }
+}
+```
+_[sphere.rs] 使用区间的球体_
+
+```rust
+fn ray_color(r: &Ray, world: &dyn Hittable) -> Color {
+    let mut rec = HitRecord::default();
++   if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
+        return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
+    }
+
+    let unit_direction = vec3::unit_vector(r.direction());
+    let a = 0.5 * (unit_direction.y() + 1.0);
+    (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+}
+```
+_[main.rs] 使用区间的新主函数_
