@@ -101,14 +101,20 @@ impl Camera {
   fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
     let mut rec = HitRecord::default();
 
-    // If we've exceeded the ray bounce limit, no more light is gathered.
+    // 如果我们超过了光线反弹限制，就不再收集光线。
     if depth <= 0 {
       return Color::default();
     }
 
     if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
-      let direction = rec.normal + vec3::random_unit_vector();
-      return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+      let mut scattered = Ray::default();
+      let mut attenuation = Color::default();
+      if let Some(mat) = rec.mat.clone() {
+        if mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
+          return attenuation * Self::ray_color(&scattered, depth - 1, world);
+        }
+      }
+      return Color::default();
     }
 
     let unit_direction = vec3::unit_vector(r.direction());

@@ -1541,3 +1541,302 @@ _[color.rs] write_color（），进行伽马校正_
 ## 金属
 
 ### 用于材质的抽象类
+
+```rust
+use super::ray::Ray;
+use super::color::Color;
+use super::hittable::HitRecord;
+
+pub trait Material {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool;
+}
+```
+_[material.rs] 材质类_
+
+### 描述光线-物体相交的数据结构
+
+```rust
++use std::rc::Rc;
+
+use super::vec3::{self, Vec3, Point3};
+use super::ray::Ray;
+use super::interval::Interval;
++use super::material::Material;
+
+#[derive(Clone, Default)]
+pub struct HitRecord {
+    pub p: Point3,
+    pub normal: Vec3,
++   pub mat: Option<Rc<dyn Material>>,
+    pub t: f64,
+    pub front_face: bool,
+}
+```
+_[hittable.rs] 添加了材质指针的击中记录_
+
+```rust
++use std::rc::Rc;
+
+...
++use super::material::Material;
+
+pub struct Sphere {
+    center: Point3,
+    radius: f64,
++   mat: Rc<dyn Material>,
+}
+
+impl Sphere {
++   pub fn new(center: &Point3, radius: f64, material: Rc<dyn Material>) -> Self {
+        Self {
+            center: *center,
+            radius,
++           mat: material,
+        }
+    }
+}
+
+impl Hittable for Sphere {
+    fn hit(&self, r: &Ray, ray_t: &Interval, hit_record: &mut HitRecord) -> bool {
+        ...
+
+        hit_record.t = root;
+        hit_record.p = r.at(hit_record.t);
+        let outward_normal = (hit_record.p - self.center) / self.radius;
+        hit_record.set_face_normal(r, &outward_normal);
++       hit_record.mat = Some(Rc::clone(&self.mat));
+
+        true
+    }
+}
+```
+_[sphere.rs] 具有添加的材质信息的射线-球体相交_
+
+### 建模光线散射和反射
+
+```rust
+pub trait Material {
+    ...
+}
+
++pub struct Lambertian {
++   pub albedo: Color,
++}
++
++impl Lambertian {
++   pub fn new(a: &Color) -> Self {
++       Self {
++           albedo: *a,
++       }
++   }
++}
++
++impl Material for Lambertian {
++   fn scatter(&self, _r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
++       let mut scatter_direction = rec.normal + vec3::random_unit_vector();
++       *scattered = Ray::new(&rec.p, &scatter_direction);
++      *attenuation = self.albedo;
++       true
++   }
++}
+```
+_[material.rs] 新的Lambertian材质类_
+
+```rust
+impl Vec3 {
+    ...
+
+    pub fn length_squared(&self) -> f64 {
+        self.e[0] * self.e[0] + self.e[1] * self.e[1] + self.e[2] * self.e[2]
+    }
+
++   pub fn near_zero(&self) -> bool {
++       let s = 1e-8;
++       self.e[0].abs() < s && self.e[1].abs() < s && self.e[2].abs() < s
++   }
+
+    ...
+}
+```
+_[vec3.rs] vec3::near_zero() 方法_
+
+```rust
+impl Material for Lambertian {
+    fn scatter(&self, _r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+        let mut scatter_direction = rec.normal + vec3::random_unit_vector();
+
++       // 捕捉退化的散射方向
++       if scatter_direction.near_zero() {
++           scatter_direction = rec.normal;
++       }
+
+        *scattered = Ray::new(&rec.p, &scatter_direction);
+        *attenuation = self.albedo;
+        true
+    }
+}
+```
+_[material.rs] Lambertian散射_
+
+### 镜面光反射
+
+```rust
+pub fn random_on_hemisphere(normal: &Vec3) -> Vec3 {
+    ...
+}
+
++pub fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
++   *v - 2.0 * dot(v, n) * *n
++}
+```
+_[vec3.rs] vec3 反射函数_
+
+```rust
+pub struct Metal {
+  pub albedo: Color,
+}
+
+impl Metal {
+  pub fn new(a: &Color) -> Self {
+    Self {
+      albedo: *a,
+    }
+  }
+}
+
+impl Material for Metal {
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+    let reflected = vec3::reflect(&vec3::unit_vector(r_in.direction()), &rec.normal);
+    *scattered = Ray::new(&rec.p, &reflected);
+    *attenuation = self.albedo;
+    true
+  }
+}
+```
+_[material.rs] 具有反射函数的金属材质_
+
+```rust
+impl Camera {
+    ...
+
+    fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+        let mut rec = HitRecord::default();
+
+        // 如果我们超过了光线反弹限制，就不再收集光线。
+        if depth <= 0 {
+            return Color::default();
+        }
+
+        if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
++           let mut scattered = Ray::default();
++           let mut attenuation = Color::default();
++           if let Some(mat) = rec.mat.clone() {
++               if mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
++                   return attenuation * Self::ray_color(&scattered, depth - 1, world);
++               }
++           }
++           return Color::default();
+        }
+
+        let unit_direction = vec3::unit_vector(r.direction());
+        let a = 0.5 * (unit_direction.y() + 1.0);
+        (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+    }
+}
+```
+_[camera.rs] 具有散射反射的光线颜色_
+
+### 带有金属球体的场景
+
+```rust
+fn main() {
+    // World
+    let mut world = HittableList::default();
+
++   let material_ground = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
++   let material_center = Rc::new(material::Lambertian::new(&color::Color::new(0.7, 0.3, 0.3)));
++   let material_left = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.8, 0.8)));
++   let material_right = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2)));
++
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(0.0, -100.5, -1.0),
++       100.0,
++       material_ground,
++   )));
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(0.0, 0.0, -1.0),
++       0.5,
++       material_center,
++   )));
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(-1.0, 0.0, -1.0),
++       0.5,
++       material_left,
++   )));
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(1.0, 0.0, -1.0),
++       0.5,
++       material_right,
++   )));
+
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_depth = 50;
+
+    // Render
+    cam.render(&world);
+}
+```
+_[main.rs] 带有金属球体的场景_
+
+![Image 13: 闪亮的金属](../../images/img-1.13-metal-shiny.png)
+
+### 模糊反射
+
+```rust
+pub struct Metal {
+    pub albedo: Color,
++   pub fuzz: f64,
+}
+
+impl Metal {
++   pub fn new(a: &Color, f: f64) -> Self {
+        Self {
+            albedo: *a,
++           fuzz: if f < 1.0 { f } else { 1.0 },
+        }
+    }
+}
+
+impl Material for Metal {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+        let reflected = vec3::reflect(&vec3::unit_vector(r_in.direction()), &rec.normal);
++       *scattered = Ray::new(&rec.p, &(reflected + self.fuzz * vec3::random_in_unit_sphere()));
+        *attenuation = self.albedo;
++       vec3::dot(scattered.direction(), &rec.normal) > 0.0
+    }
+}
+```
+_[material.rs] 金属材质模糊度_
+
+```rust
+fn main() {
+    ...
+    let material_ground = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
+    let material_center = Rc::new(material::Lambertian::new(&color::Color::new(0.7, 0.3, 0.3)));
++   let material_left = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.8, 0.8), 0.3));
++   let material_right = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2), 1.0));
+    ...
+}
+```
+_[main.cc] 带有模糊度的金属球体_
+
+![Image 14: 模糊的金属](../../images/img-1.14-metal-fuzz.png)
+
+## 电介质
+
+### 折射
+
