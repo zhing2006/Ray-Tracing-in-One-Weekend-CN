@@ -9,6 +9,7 @@ pub struct Camera {
   pub aspect_ratio: f64,  // Ratio of image width over height
   pub image_width: i32,   // Rendered image width in pixel count
   pub samples_per_pixel: usize, // Count of random samples for each pixel
+  pub max_depth: i32,     // Maximum number of ray bounces into scene
   image_height: i32,      // Rendered image height
   center: Point3,         // Camera center
   pixel00_loc: Point3,    // Location of pixel 0, 0
@@ -21,7 +22,8 @@ impl Default for Camera {
     Self {
       aspect_ratio: 1.0,
       image_width: 100,
-      samples_per_pixel: 1,
+      samples_per_pixel: 10,
+      max_depth: 10,
       image_height: 0,
       center: Point3::default(),
       pixel00_loc: Point3::default(),
@@ -44,7 +46,7 @@ impl Camera {
         let mut pixel_color = Color::default();
         for _ in 0..self.samples_per_pixel {
           let r = self.get_ray(i, j);
-          pixel_color += self.ray_color(&r, world);
+          pixel_color += Self::ray_color(&r, self.max_depth, world);
         }
         pixel_color.write_color(&mut stdout.lock(), self.samples_per_pixel).unwrap();
       }
@@ -96,10 +98,17 @@ impl Camera {
     px * self.pixel_delta_u + py * self.pixel_delta_v
   }
 
-  fn ray_color(&self, r: &Ray, world: &dyn Hittable) -> Color {
+  fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
     let mut rec = HitRecord::default();
-    if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
-      return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
+
+    // If we've exceeded the ray bounce limit, no more light is gathered.
+    if depth <= 0 {
+      return Color::default();
+    }
+
+    if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+      let direction = rec.normal + vec3::random_unit_vector();
+      return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
     }
 
     let unit_direction = vec3::unit_vector(r.direction());

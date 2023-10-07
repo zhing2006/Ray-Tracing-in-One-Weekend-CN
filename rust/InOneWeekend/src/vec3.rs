@@ -11,6 +11,11 @@ use std::ops::{
   Div,
 };
 
+use super::rtweekend::{
+  random_double,
+  random_double_range,
+};
+
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
   pub e: [f64; 3]
@@ -136,6 +141,14 @@ impl Vec3 {
   pub fn length_squared(&self) -> f64 {
     self.e[0] * self.e[0] + self.e[1] * self.e[1] + self.e[2] * self.e[2]
   }
+
+  pub fn random() -> Self {
+    Self { e: [random_double(), random_double(), random_double()] }
+  }
+
+  pub fn random_range(min: f64, max: f64) -> Self {
+    Self { e: [random_double_range(min, max), random_double_range(min, max), random_double_range(min, max)] }
+  }
 }
 
 pub type Point3 = Vec3;
@@ -154,4 +167,26 @@ pub fn cross(u: &Vec3, v: &Vec3) -> Vec3 {
 
 pub fn unit_vector(v: &Vec3) -> Vec3 {
   *v / v.length()
+}
+
+pub fn random_in_unit_sphere() -> Vec3 {
+  loop {
+    let p = Vec3::random_range(-1.0, 1.0);
+    if p.length_squared() < 1.0 {
+      return p;
+    }
+  }
+}
+
+pub fn random_unit_vector() -> Vec3 {
+  unit_vector(&random_in_unit_sphere())
+}
+
+pub fn random_on_hemisphere(normal: &Vec3) -> Vec3 {
+  let on_unit_sphere = random_in_unit_sphere();
+  if dot(&on_unit_sphere, normal) > 0.0 { // In the same hemisphere as the normal
+    on_unit_sphere
+  } else {
+    -on_unit_sphere
+  }
 }

@@ -961,7 +961,7 @@ _[camera.rs] 相机类框架_
 
 ```rust
 impl Camera {
-+   fn ray_color(&self, r: &Ray, world: &dyn Hittable) -> Color {
++   fn ray_color(r: &Ray, world: &dyn Hittable) -> Color {
 +       let mut rec = HitRecord::default();
 +       if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
 +           return 0.5 * (rec.normal + Color::new(1.0, 1.0, 1.0));
@@ -1014,7 +1014,7 @@ impl Camera {
                 let ray_direction = pixel_center - self.center;
                 let r = Ray::new(&self.center, &ray_direction);
 
-                let pixel_color = self.ray_color(&r, world);
+                let pixel_color = Self::ray_color(&r, world);
                 pixel_color.write_color(&mut stdout.lock()).unwrap();
             }
         }
@@ -1250,3 +1250,294 @@ fn main() {
 _[main.rs] 设置新的每像素采样数参数_
 
 <img src="../../images/img-1.06-antialias-before-after.png" width="400">
+
+
+## 漫反射材质
+
+```rust
+impl Vec3 {
+    ...
+
+    pub fn length_squared(&self) -> f64 {
+        self.e[0] * self.e[0] + self.e[1] * self.e[1] + self.e[2] * self.e[2]
+    }
+
++    pub fn random() -> Self {
++        Self { e: [random_double(), random_double(), random_double()] }
++    }
++
++    pub fn random_range(min: f64, max: f64) -> Self {
++        Self { e: [random_double_range(min, max), random_double_range(min, max), random_double_range(min, max)] }
++    }
+}
+```
+_[vec3.rs] vec3随机实用函数_
+
+```rust
+...
+
+pub fn unit_vector(v: &Vec3) -> Vec3 {
+    *v / v.length()
+}
+
++pub fn random_in_unit_sphere() -> Vec3 {
++   loop {
++       let p = Vec3::random_range(-1.0, 1.0);
++       if p.length_squared() < 1.0 {
++           return p;
++       }
++   }
++}
+```
+_[vec3.rs] random_in_unit_sphere()函数_
+
+```rust
+...
+
+pub fn random_in_unit_sphere() -> Vec3 {
+    loop {
+        let p = Vec3::random_range(-1.0, 1.0);
+        if p.length_squared() < 1.0 {
+            return p;
+        }
+    }
+}
+
++pub fn random_unit_vector() -> Vec3 {
++    unit_vector(&random_in_unit_sphere())
++}
+```
+_[vec3.rs] 单位球上的随机向量_
+
+```rust
+...
+
+pub fn random_unit_vector() -> Vec3 {
+    unit_vector(&random_in_unit_sphere())
+}
+
++pub fn random_on_hemisphere(normal: &Vec3) -> Vec3 {
++   let on_unit_sphere = random_in_unit_sphere();
++   if dot(&on_unit_sphere, normal) > 0.0 { // In the same hemisphere as the normal
++       on_unit_sphere
++   } else {
++       -on_unit_sphere
++   }
++}
+```
+_[vec3.rs] random_on_hemisphere()函数_
+
+```rust
+impl Camera{
+    ...
+
+    fn ray_color(r: &Ray, world: &dyn Hittable) -> Color {
+        let mut rec = HitRecord::default();
+
+        if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
++           let direction = vec3::random_on_hemisphere(&rec.normal);
++           return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), world);
+        }
+
+        let unit_direction = vec3::unit_vector(r.direction());
+        let a = 0.5 * (unit_direction.y() + 1.0);
+        (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+    }
+}
+```
+_[camera.rs] 使用随机光线方向的ray_color()_
+
+![Image 7: 漫反射球体的首次渲染](../../images/img-1.07-first-diffuse.png)
+
+### 限制子光线的数量
+
+```rust
+pub struct Camera {
+    pub aspect_ratio: f64,  // Ratio of image width over height
+    pub image_width: i32,   // Rendered image width in pixel count
+    pub samples_per_pixel: usize, // Count of random samples for each pixel
++   pub max_depth: i32,     // Maximum number of ray bounces into scene
+    image_height: i32,      // Rendered image height
+    center: Point3,         // Camera center
+    pixel00_loc: Point3,    // Location of pixel 0, 0
+    pixel_delta_u: Vec3,    // Offset to pixel to the right
+    pixel_delta_v: Vec3,    // Offset to pixel below
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            aspect_ratio: 1.0,
+            image_width: 100,
+            samples_per_pixel: 10,
++           max_depth: 10,
+            image_height: 0,
+            center: Point3::default(),
+            pixel00_loc: Point3::default(),
+            pixel_delta_u: Vec3::default(),
+            pixel_delta_v: Vec3::default(),
+        }
+    }
+}
+
+impl Camera {
+    pub fn render(&mut self, world: &dyn Hittable) {
+        self.initialize();
+
+        println!("P3\n{} {}\n255", self.image_width, self.image_height);
+        let stdout = std::io::stdout();
+
+        for j in 0..self.image_height {
+            eprintln!("\rScanlines remaining: {}", self.image_height - j);
+            for i in 0..self.image_width {
+                let mut pixel_color = Color::default();
+                for _ in 0..self.samples_per_pixel {
+                    let r = self.get_ray(i, j);
++                   pixel_color += Self::ray_color(&r, self.max_depth, world);
+                }
+                pixel_color.write_color(&mut stdout.lock(), self.samples_per_pixel).unwrap();
+            }
+        }
+
+        eprintln!("\nDone.");
+    }
+
+    ...
+
++   fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+        let mut rec = HitRecord::default();
+
++       // If we've exceeded the ray bounce limit, no more light is gathered.
++       if depth <= 0 {
++           return Color::default();
++       }
+
+        if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
+        let direction = vec3::random_on_hemisphere(&rec.normal);
++           return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+        }
+
+        let unit_direction = vec3::unit_vector(r.direction());
+        let a = 0.5 * (unit_direction.y() + 1.0);
+        (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+    }
+}
+```
+_[camera.rs] 带有深度限制的camera::ray_color()函数_
+
+```rust
+fn main() {
+    ...
+
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
++   cam.max_depth = 50;
+
+    // Render
+    cam.render(&world);
+}
+```
+_[main.rs]使用新的光线深度限制_
+
+![Image 8：有限反射次数的漫反射球体的第二次渲染](../../images/img-1.08-second-diffuse.png)
+
+### 修复阴影痤疮
+
+```rust
+impl Camera {
+    fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+        let mut rec = HitRecord::default();
+
+        // If we've exceeded the ray bounce limit, no more light is gathered.
+        if depth <= 0 {
+            return Color::default();
+        }
+
++       if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+            let direction = vec3::random_on_hemisphere(&rec.normal);
+            return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+        }
+
+        let unit_direction = vec3::unit_vector(r.direction());
+        let a = 0.5 * (unit_direction.y() + 1.0);
+        (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+    }
+}
+```
+_[camera.rs] 使用容差计算反射光线的起点_
+
+![Image 9：没有阴影痤疮的漫反射球体](../../images/img-1.09-no-acne.png)
+
+### 真正的Lambertian反射
+
+```rust
+impl Camera {
+    fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+        let mut rec = HitRecord::default();
+
+        // If we've exceeded the ray bounce limit, no more light is gathered.
+        if depth <= 0 {
+            return Color::default();
+        }
+
+        if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
++           let direction = rec.normal + vec3::random_unit_vector();
+            return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+        }
+
+        let unit_direction = vec3::unit_vector(r.direction());
+        let a = 0.5 * (unit_direction.y() + 1.0);
+        (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+    }
+}
+```
+_[camera.rs]使用替代漫反射的ray_color()_
+
+![Image 10：正确渲染的Lambertian球体](../../images/img-1.10-correct-lambertian.png)
+
+### 使用伽马校正进行准确的颜色强度
+
+```rust
++pub fn linear_to_gamma(linear_component: f64) -> f64 {
++   if linear_component > 0.0 {
++       linear_component.sqrt()
++   } else {
++       0.0
++   }
++}
+
+impl Color {
+    pub fn write_color(&self, out: &mut dyn Write, samples_per_pixel: usize) -> std::io::Result<()> {
+        let r = self.x();
+        let g = self.y();
+        let b = self.z();
+
+        // Divide the color by the number of samples.
+        let scale = 1.0 / samples_per_pixel as f64;
+        let r = scale * r;
+        let g = scale * g;
+        let b = scale * b;
+
++       // Apply the linear to gamma transform.
++       let r = linear_to_gamma(r);
++       let g = linear_to_gamma(g);
++       let b = linear_to_gamma(b);
+
+        // Write the translated [0,255] value of each color component.
+        writeln!(out, "{} {} {}",
+            (256.0 * INTENSITY.clamp(r)) as i32,
+            (256.0 * INTENSITY.clamp(g)) as i32,
+            (256.0 * INTENSITY.clamp(b)) as i32)
+    }
+}
+```
+_[color.rs] write_color（），进行伽马校正_
+
+![Image 12：经过伽马校正的两个漫反射球体的渲染](../../images/img-1.12-linear-gamma.png)
+
+## 金属
+
+### 用于材质的抽象类
