@@ -56,6 +56,8 @@ fn main() {
 
     target/release/in_one_weekend > image.ppm
 
+![Image 1：第一个PPM图像](../../images/img-1.01-first-ppm-image.png)
+
 ### 添加进度指示器
 
 ```rust
@@ -85,6 +87,7 @@ fn main() {
 +   eprintln!("\nDone.");
 }
 ```
+_[main.rs] 主渲染循环与进度报告_
 
 ## vec3类
 
@@ -98,7 +101,7 @@ use std::ops::{
     Neg,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
     pub e: [f64; 3]
 }
@@ -243,9 +246,9 @@ pub fn unit_vector(v: &Vec3) -> Vec3 {
     (*v).clone() / v.length()
 }
 ```
-[vec3.rs]Vec3 定义和辅助函数
+_[vec3.rs]Vec3 定义和辅助函数_
 
-需要注意的是和C++不同Rust不能重载运算符，需要通过实现不同运算符的Trait来实现相关功能。另外这里通过实现std::fmt::Display这个Trait来达到C++中ostream输出的功能。
+需要注意的是和C++不同Rust不能重载运算符，需要通过实现不同运算符的Trait来实现相关功能。另外这里通过实现std::fmt::Display这个Trait来达到C++中ostream输出的功能。还有由于Rust的所有权特性，这里为Vec3实现了Copy Trait，这样更接近C++中vec3的行为。
 
 ### 颜色实用函数
 
@@ -265,7 +268,7 @@ impl Color {
     }
 }
 ```
-[color.rs]Color 实用函数
+_[color.rs]Color 实用函数_
 
 然后修改main.rs：
 
@@ -296,4 +299,156 @@ fn main() {
     eprintln!("\nDone.");
 }
 ```
-[main.rs] 第一个PPM图像的最终代码
+_[main.rs] 第一个PPM图像的最终代码_
+
+## 光线、简单相机和背景
+
+### 光线类
+
+```rust
+use super::vec3::{
+    Vec3,
+    Point3,
+};
+
+pub struct Ray {
+    orig: Vec3,
+    dir: Vec3,
+}
+
+impl Default for Ray {
+    fn default() -> Self {
+        Self {
+        orig: Vec3::default(),
+        dir: Vec3::default(),
+        }
+    }
+}
+
+impl Ray {
+    pub fn new(orig: &Point3, dir: &Vec3) -> Self {
+        Self {
+        orig: *orig,
+        dir: *dir,
+        }
+    }
+
+    pub fn origin(&self) -> &Point3 {
+        &self.orig
+    }
+
+    pub fn direction(&self) -> &Vec3 {
+        &self.dir
+    }
+
+    pub fn at(&self, t: f64) -> Point3 {
+        self.orig + self.dir * t
+    }
+}
+```
+_[ray.rs] 光线类_
+
+### 发送光线到场景中
+
+```rust
+let aspect_ratio = 16.0 / 9.0;
+let image_width = 400;
+
+// 计算图像高度，并确保至少为1。
+let image_height = image_width / aspect_ratio as i32;
+let image_height = if image_height < 1 { 1 } else { image_height };
+
+// 视口宽度小于1是可以的，因为它们是实值。
+let viewport_height = 2.0;
+let viewport_width = viewport_height * (image_width as f64 / image_height as f64);
+```
+_渲染设置_
+
+```rust
+pub mod vec3;
++pub mod color;
+pub mod ray;
+
+use vec3::{
+    Vec3,
+    Point3,
+};
+use color::Color;
+use ray::Ray;
+
++fn ray_color(r: &Ray) -> Color {
++   Color::new(0.0, 0.0, 0.0)
+}
+
+fn main() {
+    // Image
++   let aspect_ratio = 16.0 / 9.0;
++   let image_width = 400;
++
++   // 计算图像高度，并确保至少为1。
++   let image_height = image_width / aspect_ratio as i32;
++   let image_height = if image_height < 1 { 1 } else { image_height };
++
++   // Camera
++   let focal_length = 1.0;
++   let viewport_height = 2.0;
++   let viewport_width = viewport_height * (image_width as f64 / image_height as f64);
++   let camera_center = Point3::default();
++
++   // 计算水平和垂直视口边缘上的向量。
++   let viewport_u = Vec3::new(viewport_width, 0.0, 0.0);
++   let viewport_v = Vec3::new(0.0, -viewport_height, 0.0);
++
++   // 计算从像素到像素的水平和垂直增量向量。
++   let pixel_delta_u = viewport_u / image_width as f64;
++   let pixel_delta_v = viewport_v / image_height as f64;
++
++   // 计算左上角像素的位置。
++   let viewport_upper_left = camera_center
++       - Vec3::new(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
++   let pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
+
+    // Render
+    println!("P3\n{} {}\n255", image_width, image_height);
+    let stdout = std::io::stdout();
+
+    for j in 0..image_height {
+        eprintln!("\rScanlines remaining: {}", image_height - j);
+        for i in 0..image_width {
++           let pixel_center = pixel00_loc + i as f64 * pixel_delta_u + j as f64 * pixel_delta_v;
++           let ray_direction = pixel_center - camera_center;
++           let r = Ray::new(&camera_center, &ray_direction);
++
++           let pixel_color = ray_color(&r);
+            pixel_color.write_color(&mut stdout.lock()).unwrap();
+        }
+    }
+
+    eprintln!("\nDone.");
+}
+```
+_[main.rs] 创建场景光线_
+
+```rust
+pub mod vec3;
+pub mod color;
+pub mod ray;
+
+use vec3::{
+    Vec3,
+    Point3,
+};
+use color::Color;
+use ray::Ray;
+
+fn ray_color(r: &Ray) -> Color {
++   let unit_direction = vec3::unit_vector(r.direction());
++   let a = 0.5 * (unit_direction.y() + 1.0);
++   (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+}
+
+...
+```
+_[main.rs] 渲染一个蓝白渐变_
+
+![Image 2: 根据射线的Y坐标产生蓝白渐变](../../images/img-1.02-blue-to-white.png)

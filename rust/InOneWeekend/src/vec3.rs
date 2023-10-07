@@ -11,7 +11,7 @@ use std::ops::{
   Div,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Vec3 {
   pub e: [f64; 3]
 }
@@ -153,5 +153,5 @@ pub fn cross(u: &Vec3, v: &Vec3) -> Vec3 {
 }
 
 pub fn unit_vector(v: &Vec3) -> Vec3 {
-  (*v).clone() / v.length()
+  *v / v.length()
 }

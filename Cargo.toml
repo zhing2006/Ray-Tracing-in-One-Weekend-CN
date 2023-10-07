@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "rust/InOneWeekend",
+]
+resolver = "2"
