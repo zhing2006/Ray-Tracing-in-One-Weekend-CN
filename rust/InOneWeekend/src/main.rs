@@ -21,7 +21,7 @@ fn main() {
   let image_width = 400;
 
   // 计算图像高度，并确保至少为1。
-  let image_height = image_width / aspect_ratio as i32;
+  let image_height = (image_width as f64 / aspect_ratio) as i32;
   let image_height = if image_height < 1 { 1 } else { image_height };
 
   // Camera
