@@ -3,18 +3,10 @@ use super::vec3::{
   Point3,
 };
 
+#[derive(Default)]
 pub struct Ray {
   orig: Vec3,
   dir: Vec3,
-}
-
-impl Default for Ray {
-  fn default() -> Self {
-    Self {
-      orig: Vec3::default(),
-      dir: Vec3::default(),
-    }
-  }
 }
 
 impl Ray {
