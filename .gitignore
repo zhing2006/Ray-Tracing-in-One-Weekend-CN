@@ -4,3 +4,8 @@ build/
 /*.ppm
 
 /v3/*.ppm
+
+# For rust
+/.vscode
+**/target
+/rust/InOneWeekend/image.ppm

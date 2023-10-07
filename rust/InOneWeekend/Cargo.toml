@@ -1,0 +1,6 @@
+[package]
+name = "in_one_weekend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
