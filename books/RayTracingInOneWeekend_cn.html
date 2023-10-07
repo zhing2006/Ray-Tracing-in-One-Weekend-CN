@@ -31,8 +31,8 @@
 > 我不在网上提供代码，但代码是真实存在的，我会展示所有代码，除了`vec3`类中的一些简单操作符。我非常推荐通过输入
 代码来学习它，但当代码可用时，我会使用它，所以只有当代码不可用时，我才会实践我所讲的。所以不要问我要代码！
 
-我保留了最后一部分，因为我做了一个180度的转变，这是很有趣的。一些读者在比较代码时发现了一些微妙的错误。所以请确
-实输入代码，但您可以在[GitHub上的RayTracing项目][repo]中找到每本书的完成源代码。
+最后，我做了一个180度的转变，这是很有趣的。一些读者在比较代码时发现了一些微妙的错误。所以请确实输入代码，
+但您可以在[GitHub上的RayTracing项目][repo]中找到每本书的完成源代码。
 
 关于这些书籍的实现代码的说明 - 我们对包含的代码的理念优先考虑以下目标：
 
@@ -173,7 +173,7 @@ PPM图像格式
 打开输出文件（在我的Mac上使用`ToyViewer`，但如果您的查看器不支持它，请尝试在您喜欢的图像查看器中打开，并在
 Google中搜索“ppm查看器”）会显示以下结果：
 
-  ![<span class='num'>图像 1：</span>第一个PPM图像
+  ![<span class='num'>Image 1：</span>第一个PPM图像
   ](../images/img-1.01-first-ppm-image.png class='pixel')
 
 太棒了！这是计算机图形学中的“Hello World”。如果您的图像看起来不像这样，请在文本编辑器中打开输出文件并查看其内
@@ -451,7 +451,7 @@ $\mathbf{A}$是光线的起点，$\mathbf{b}$是光线的方向。光线参数$t
 通过插入不同的$t$值，$\mathbf{P}(t)$沿着光线移动。添加负的$t$值，可以在三维线上的任意位置。对于正的$t$值，
 你只能得到$\mathbf{A}$前面的部分，这通常被称为半线或光线。
 
-  ![Figure [lerp]: 线性插值](../images/fig-1.02-lerp.jpg)
+  ![Figure [lerp]: 光线](../images/fig-1.02-lerp.jpg)
 
 <div class='together'>
 我们可以将光线的概念表示为一个类，并将函数$\mathbf{P}(t)$表示为我们将称之为`ray::at(t)`的函数：
@@ -545,8 +545,8 @@ $\mathbf{A}$是光线的起点，$\mathbf{b}$是光线的方向。光线参数$t
 接下来，我们将定义相机中心：一个在三维空间中的点，所有场景光线将从该点发出（这通常也称为_视点_）。从相机中心到
 视口中心的向量将与视口正交。我们将首先将视口与相机中心点之间的距离设置为一个单位。这个距离通常被称为_焦距_。
 
-为了简单起见，我们将从相机中心点$(0,0,0)$开始。我们还将y轴向上，x轴向右，负z轴指向观察方向。（这通常被称为_右
-手坐标系_。）
+为了简单起见，我们将从相机中心点$(0,0,0)$开始。我们还将y轴向上，x轴向右，负z轴指向观察方向（这通常被称为右
+手坐标系）。
 
   ![Figure [camera-geom]: 相机几何特征](../images/fig-1.03-cam-geom.jpg)
 
@@ -2355,7 +2355,7 @@ $\mathbf{P}$向随机点$\mathbf{S}$发送一条光线（这是向量$(\mathbf{S
                 vec3 direction = rec.normal + random_unit_vector();
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
                 return 0.5 * ray_color(ray(rec.p, direction), depth-1, world);
-        }
+            }
 
             vec3 unit_direction = unit_vector(r.direction());
             auto a = 0.5*(unit_direction.y() + 1.0);
@@ -2370,7 +2370,7 @@ $\mathbf{P}$向随机点$\mathbf{S}$发送一条光线（这是向量$(\mathbf{S
 <div class='together'>
 渲染后，我们得到了一个类似的图像：
 
-  ![<span class='num'>图像 10：</span>正确渲染的Lambertian球体
+  ![<span class='num'>Image 10：</span>正确渲染的Lambertian球体
   ](../images/img-1.10-correct-lambertian.png class='pixel')
 
 </div>
@@ -2395,30 +2395,30 @@ $\mathbf{P}$向随机点$\mathbf{S}$发送一条光线（这是向量$(\mathbf{S
 看起来相当明亮（在现实生活中，是浅灰色），但它们看起来相当暗淡。如果我们遍历完整的亮度色阶，我们可以更清楚
 地看到这一点。我们从将`ray_color`函数的反射率从`0.5`（50%）设置为`0.1`（10%）开始：
 
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
-class camera {
-    ...
-    color ray_color(const ray& r, int depth, const hittable& world) const {
-        hit_record rec;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+    class camera {
+        ...
+        color ray_color(const ray& r, int depth, const hittable& world) const {
+            hit_record rec;
 
-        // If we've exceeded the ray bounce limit, no more light is gathered.
-        if (depth <= 0)
-            return color(0,0,0);
+            // If we've exceeded the ray bounce limit, no more light is gathered.
+            if (depth <= 0)
+                return color(0,0,0);
 
-        if (world.hit(r, interval(0.001, infinity), rec)) {
-            vec3 direction = rec.normal + random_unit_vector();
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
-            return 0.1 * ray_color(ray(rec.p, direction), depth-1, world);
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
-    }
+            if (world.hit(r, interval(0.001, infinity), rec)) {
+                vec3 direction = rec.normal + random_unit_vector();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+                return 0.1 * ray_color(ray(rec.p, direction), depth-1, world);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+        }
 
-        vec3 unit_direction = unit_vector(r.direction());
-        auto a = 0.5*(unit_direction.y() + 1.0);
-        return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
-    }
-};
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-gamut]：<kbd>[camera.h]</kbd>具有10％反射率的ray_color（）]
+            vec3 unit_direction = unit_vector(r.direction());
+            auto a = 0.5*(unit_direction.y() + 1.0);
+            return (1.0-a)*color(1.0, 1.0, 1.0) + a*color(0.5, 0.7, 1.0);
+        }
+    };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    [Listing [ray-color-gamut]: <kbd>[camera.h]</kbd>具有10％反射率的ray_color（）]
 
 我们以这个新的10%反射率进行渲染。然后我们将反射率设置为30％并再次渲染。我们重复进行50％、70％和最后的90％。
 您可以在您选择的照片编辑器中从左到右叠加这些图像，您应该会得到一个非常好的视觉表示您选择的色阶的逐渐增加的亮度。
@@ -2474,7 +2474,7 @@ class camera {
             << int(256 * intensity.clamp(b)) << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [write-color-gamma]：<kbd>[color.h]</kbd> write_color（），进行伽马校正]
+    [Listing [write-color-gamma]: <kbd>[color.h]</kbd> write_color（），进行伽马校正]
 
 
 <div class='together'>
@@ -2688,7 +2688,7 @@ class camera {
         color albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [lambertian-catch-zero]: <kbd>[material.h]</kbd> Lambertian散射，防弹]
+    [Listing [lambertian-catch-zero]: <kbd>[material.h]</kbd> Lambertian散射]
 
 
 
@@ -2906,7 +2906,7 @@ class camera {
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     [Listing [metal-fuzz-spheres]: <kbd>[main.cc]</kbd> 带有模糊度的金属球体]
 
-  ![<span class='num'>图像 14:</span> 模糊的金属
+  ![<span class='num'>Image 14:</span> 模糊的金属
   ](../images/img-1.14-metal-fuzz.png class='pixel')
 
 </div>
@@ -2923,7 +2923,7 @@ class camera {
 最难调试的部分是折射光线。我通常首先只让所有的光线折射，如果有折射光线的话。对于这个项目，我试图在我们的场景中
 放入两个玻璃球，我得到了这个（我还没有告诉你如何正确或错误地做这个，但很快就会！）：
 
-  ![<span class='num'>图像 15:</span> 玻璃首次
+  ![<span class='num'>Image 15:</span> 玻璃
   ](../images/img-1.15-glass-first.png class='pixel')
 
 这个对吗？现实生活中的玻璃球看起来很奇怪。但是，这不对。世界应该被上下颠倒，没有奇怪的黑色东西。我只是打印出
