@@ -152,7 +152,7 @@ _**请查阅[CONTRIBUTING][]文档以了解最有效的操作方式。**_
 
 
 [book1]:           books/RayTracingInOneWeekend_cn.html
-[book2]:           books/RayTracingTheNextWeek.html
+[book2]:           books/RayTracingTheNextWeek_cn.html
 [book3]:           books/RayTracingTheRestOfYourLife.html
 [CONTRIBUTING]:    CONTRIBUTING.md
 [cover1]:          images/cover/CoverRTW1-small.jpg
