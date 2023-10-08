@@ -2259,3 +2259,198 @@ _[main.rs] 改变视场_
 
 ## 失焦模糊
 
+### 生成采样光线
+
+```rust
+pub fn unit_vector(v: Vec3) -> Vec3 {
+    v / v.length()
+}
+
++pub fn random_in_unit_disk() -> Vec3 {
++   loop {
++       let p = Vec3::new(random_double_range(-1.0, 1.0), random_double_range(-1.0, 1.0), 0.0);
++       if p.length_squared() < 1.0 {
++           return p;
++       }
++   }
+}
+```
+_[vec3.rs] 在单位盘内生成随机点_
+
+```rust
+pub struct Camera {
+    ...
++   pub defocus_angle: f64, // Defocus blur angle
++   pub focus_dist: f64,    // Focus distance
+    ...
++   defocus_disk_u: Vec3,   // Defocus disk horizontal axis
++   defocus_disk_v: Vec3,   // Defocus disk vertical axis
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            ...
++           defocus_angle: 0.0,
++           focus_dist: 10.0,
+            ...
++           defocus_disk_u: Vec3::default(),
++           defocus_disk_v: Vec3::default(),
+        }
+    }
+}
+
+impl Camera {
+    ...
+
+    fn initialize(&mut self) {
+        ...
+
+        // 确定视口尺寸。
+-       let focal_length = (self.lookfrom - self.lookat).length();
+        let theta = rtweekend::degrees_to_radians(self.vfov);
+        let h = (theta / 2.0).tan();
++       let viewport_height = 2.0 * h * self.focus_dist;
+        let viewport_width = viewport_height * (self.image_width as f64 / self.image_height as f64);
+    }
+    ...
+
+        // 计算左上角像素的位置。
+        let viewport_upper_left = self.center
++       - (self.focus_dist * self.w)
+        - (0.5 * viewport_u)
+        - (0.5 * viewport_v);
+        self.pixel00_loc = viewport_upper_left + 0.5 * (self.pixel_delta_u + self.pixel_delta_v);
+
++       // 计算相机失焦盘的基向量。
++       let defocus_radius = self.focus_dist * (rtweekend::degrees_to_radians(self.defocus_angle / 2.0)).tan();
++       self.defocus_disk_u = self.u * defocus_radius;
++       self.defocus_disk_v = self.v * defocus_radius;
+    }
+
+    fn get_ray(&self, i: i32, j: i32) -> Ray {
+        // Get a randomly sampled camera ray for the pixel at location i,j.
+        let pixel_center = self.pixel00_loc + i as f64 * self.pixel_delta_u + j as f64 * self.pixel_delta_v;
+        let pixel_sample = pixel_center + self.pixel_sample_square();
+
++       let ray_origin = if self.defocus_angle <= 0.0 {
++           self.center
++       } else {
++           self.defocus_disk_sample()
++       };
+        let ray_direction = pixel_sample - ray_origin;
+
+        Ray::new(ray_origin, ray_direction)
+    }
+
+    ...
+
++   fn defocus_disk_sample(&self) -> Point3 {
++       // Returns a random point in the defocus disk.
++       let p = vec3::random_in_unit_disk();
++       self.center + p.x() * self.defocus_disk_u + p.y() * self.defocus_disk_v
++   }
+
+    ...
+}
+```
+_[camera.rs] 具有可调景深（dof）的相机_
+
+```rust
+    cam.defocus_angle = 10.0;
+    cam.focus_dist = 3.4;
+```
+_[main.rs] 具有景深的场景相机_
+
+![Image 22: 具有景深的球体](../../images/img-1.22-depth-of-field.png)
+
+## 接下来去哪里？
+
+### 最终的渲染
+
+```rust
+fn main() {
+    // World
+    let mut world = HittableList::default();
+
+    let ground_material: Rc<dyn Material> = Rc::new(
+        Lambertian::new(color::Color::new(0.5, 0.5, 0.5))
+    );
+    world.add(Rc::new(
+        Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0, ground_material)
+    ));
+
+    for a in -11..11 {
+        for b in -11..11 {
+            let choose_mat = rtweekend::random_double();
+            let center = Point3::new(
+                a as f64 + 0.9 * rtweekend::random_double(),
+                0.2,
+                b as f64 + 0.9 * rtweekend::random_double(),
+            );
+
+            if (center - Point3::new(4.0, 0.2, 0.0)).length() > 0.9 {
+                let sphere_material: Rc<dyn Material> = if choose_mat < 0.8 {
+                    // diffuse
+                    let albedo = Color::random() * Color::random();
+                    Rc::new(Lambertian::new(albedo))
+                } else if choose_mat < 0.95 {
+                    // metal
+                    let albedo = Color::random_range(0.5, 1.0);
+                    let fuzz = rtweekend::random_double_range(0.0, 0.5);
+                    Rc::new(Metal::new(albedo, fuzz))
+                } else {
+                    // glass
+                    Rc::new(Dielectric::new(1.5))
+                };
+
+                world.add(Rc::new(
+                Sphere::new(center, 0.2, sphere_material)
+                ));
+            }
+        }
+    }
+
+    let material1: Rc<dyn Material> = Rc::new(
+        Dielectric::new(1.5)
+    );
+    world.add(Rc::new(
+        Sphere::new(Point3::new(0.0, 1.0, 0.0), 1.0, material1)
+    ));
+
+    let material2: Rc<dyn Material> = Rc::new(
+        Lambertian::new(Color::new(0.4, 0.2, 0.1))
+    );
+    world.add(Rc::new(
+        Sphere::new(Point3::new(-4.0, 1.0, 0.0), 1.0, material2)
+    ));
+
+    let material3: Rc<dyn Material> = Rc::new(
+        Metal::new(Color::new(0.7, 0.6, 0.5), 0.0)
+    );
+    world.add(Rc::new(
+        Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0, material3)
+    ));
+
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 1200;
+    cam.samples_per_pixel = 500;
+    cam.max_depth = 50;
+
+    cam.vfov = 20.0;
+    cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
+    cam.lookat = Point3::new(0.0, 0.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.6;
+    cam.focus_dist = 10.0;
+
+    // Render
+    cam.render(&world);
+}
+```
+_[main.rs] 最终场景_
+
+![Image 23: 最终场景](../../images/img-1.23-rust-book1-final.png)
