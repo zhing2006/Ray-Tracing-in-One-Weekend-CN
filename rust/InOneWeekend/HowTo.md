@@ -230,11 +230,11 @@ impl Vec3 {
 
 pub type Point3 = Vec3;
 
-pub fn dot(u: &Vec3, v: &Vec3) -> f64 {
+pub fn dot(u: Vec3, v: Vec3) -> f64 {
     u.e[0] * v.e[0] + u.e[1] * v.e[1] + u.e[2] * v.e[2]
 }
 
-pub fn cross(u: &Vec3, v: &Vec3) -> Vec3 {
+pub fn cross(u: Vec3, v: Vec3) -> Vec3 {
     Vec3 { e: [
         u.e[1] * v.e[2] - u.e[2] * v.e[1],
         u.e[2] * v.e[0] - u.e[0] * v.e[2],
@@ -242,13 +242,13 @@ pub fn cross(u: &Vec3, v: &Vec3) -> Vec3 {
     ]}
 }
 
-pub fn unit_vector(v: &Vec3) -> Vec3 {
-    (*v).clone() / v.length()
+pub fn unit_vector(v: Vec3) -> Vec3 {
+    v / v.length()
 }
 ```
 _[vec3.rs]Vec3 定义和辅助函数_
 
-需要注意的是和C++不同Rust不能重载运算符，需要通过实现不同运算符的Trait来实现相关功能。另外这里通过实现std::fmt::Display这个Trait来达到C++中ostream输出的功能。还有由于Rust的所有权特性，这里为Vec3实现了Copy Trait，这样更接近C++中vec3的行为。
+需要注意的是和C++不同Rust不能重载运算符，需要通过实现不同运算符的Trait来实现相关功能。另外这里通过实现std::fmt::Display这个Trait来达到C++中ostream输出的功能。还有由于Rust的所有权特性，这里为Vec3实现了Copy Trait，这样更接近C++中vec3的行为。且为了代码的简洁性，所有的传参都使用了值传递，会导致Vec3的复制，效率没有C++高。此处可以进一步优化，有兴趣的可以自行研究。
 
 ### 颜色实用函数
 
@@ -326,19 +326,19 @@ impl Default for Ray {
 }
 
 impl Ray {
-    pub fn new(orig: &Point3, dir: &Vec3) -> Self {
+    pub fn new(orig: Point3, dir: Vec3) -> Self {
         Self {
-        orig: *orig,
-        dir: *dir,
+        orig,
+        dir,
         }
     }
 
-    pub fn origin(&self) -> &Point3 {
-        &self.orig
+    pub fn origin(&self) -> Point3 {
+        self.orig
     }
 
-    pub fn direction(&self) -> &Vec3 {
-        &self.dir
+    pub fn direction(&self) -> Vec3 {
+        self.dir
     }
 
     pub fn at(&self, t: f64) -> Point3 {
@@ -417,7 +417,7 @@ fn main() {
         for i in 0..image_width {
 +           let pixel_center = pixel00_loc + i as f64 * pixel_delta_u + j as f64 * pixel_delta_v;
 +           let ray_direction = pixel_center - camera_center;
-+           let r = Ray::new(&camera_center, &ray_direction);
++           let r = Ray::new(camera_center, ray_direction);
 +
 +           let pixel_color = ray_color(&r);
             pixel_color.write_color(&mut stdout.lock()).unwrap();
@@ -597,9 +597,9 @@ impl Sphere {
 
 impl Hittable for Sphere {
     fn hit(&self, r: &Ray, ray_tmin: f64, ray_tmax: f64, hit_record: &mut HitRecord) -> bool {
-        let oc = self.center - *r.origin();
+        let oc = self.center - r.origin();
         let a = r.direction().length_squared();
-        let h = vec3::dot(r.direction(), &oc);
+        let h = vec3::dot(r.direction(), oc);
         let c = oc.length_squared() - self.radius * self.radius;
 
         let discriminant = h * h - a * c;
@@ -638,15 +638,15 @@ pub struct HitRecord {
 }
 
 +impl HitRecord {
-+   pub fn set_face_normal(&mut self, r: &Ray, outward_normal: &Vec3) {
++   pub fn set_face_normal(&mut self, r: &Ray, outward_normal: Vec3) {
 +       // Sets the hit record normal vector.
 +       // NOTE: the parameter `outward_normal` is assumed to have unit length.
 +
 +       self.front_face = vec3::dot(r.direction(), outward_normal) < 0.0;
 +       self.normal = if self.front_face {
-+           *outward_normal
++           outward_normal
 +       } else {
-+           -*outward_normal
++           -outward_normal
 +       };
 +   }
 +}
@@ -661,7 +661,7 @@ impl Hittable for Sphere {
         hit_record.t = root;
         hit_record.p = r.at(hit_record.t);
 +       let outward_normal = (hit_record.p - self.center) / self.radius;
-+       hit_record.set_face_normal(r, &outward_normal);
++       hit_record.set_face_normal(r, outward_normal);
 
         true
     }
@@ -818,7 +818,7 @@ fn main() {
         for i in 0..image_width {
             let pixel_center = pixel00_loc + i as f64 * pixel_delta_u + j as f64 * pixel_delta_v;
             let ray_direction = pixel_center - camera_center;
-            let r = Ray::new(&camera_center, &ray_direction);
+            let r = Ray::new(camera_center, ray_direction);
 
 +           let pixel_color = ray_color(&r, &world);
             pixel_color.write_color(&mut stdout.lock()).unwrap();
@@ -1012,7 +1012,7 @@ impl Camera {
             for i in 0..self.image_width {
                 let pixel_center = self.pixel00_loc + i as f64 * self.pixel_delta_u + j as f64 * self.pixel_delta_v;
                 let ray_direction = pixel_center - self.center;
-                let r = Ray::new(&self.center, &ray_direction);
+                let r = Ray::new(self.center, ray_direction);
 
                 let pixel_color = Self::ray_color(&r, world);
                 pixel_color.write_color(&mut stdout.lock()).unwrap();
@@ -1218,7 +1218,7 @@ impl Camera {
 +       let ray_origin = self.center;
 +       let ray_direction = pixel_sample - ray_origin;
 +
-+       Ray::new(&ray_origin, &ray_direction)
++       Ray::new(ray_origin, ray_direction)
 +   }
 +
 +   fn pixel_sample_square(&self) -> Vec3 {
@@ -1276,8 +1276,8 @@ _[vec3.rs] vec3随机实用函数_
 ```rust
 ...
 
-pub fn unit_vector(v: &Vec3) -> Vec3 {
-    *v / v.length()
+pub fn unit_vector(v: Vec3) -> Vec3 {
+    v / v.length()
 }
 
 +pub fn random_in_unit_sphere() -> Vec3 {
@@ -1316,9 +1316,9 @@ pub fn random_unit_vector() -> Vec3 {
     unit_vector(&random_in_unit_sphere())
 }
 
-+pub fn random_on_hemisphere(normal: &Vec3) -> Vec3 {
++pub fn random_on_hemisphere(normal: Vec3) -> Vec3 {
 +   let on_unit_sphere = random_in_unit_sphere();
-+   if dot(&on_unit_sphere, normal) > 0.0 { // In the same hemisphere as the normal
++   if dot(on_unit_sphere, normal) > 0.0 { // In the same hemisphere as the normal
 +       on_unit_sphere
 +   } else {
 +       -on_unit_sphere
@@ -1335,8 +1335,8 @@ impl Camera{
         let mut rec = HitRecord::default();
 
         if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
-+           let direction = vec3::random_on_hemisphere(&rec.normal);
-+           return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), world);
++           let direction = vec3::random_on_hemisphere(rec.normal);
++           return 0.5 * Self::ray_color(&Ray::new(rec.p, direction), world);
         }
 
         let unit_direction = vec3::unit_vector(r.direction());
@@ -1413,8 +1413,8 @@ impl Camera {
 +       }
 
         if world.hit(r, &Interval::new(0.0, rtweekend::INFINITY), &mut rec) {
-        let direction = vec3::random_on_hemisphere(&rec.normal);
-+           return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+        let direction = vec3::random_on_hemisphere(rec.normal);
++           return 0.5 * Self::ray_color(&Ray::new(rec.p, direction), depth - 1, world);
         }
 
         let unit_direction = vec3::unit_vector(r.direction());
@@ -1457,8 +1457,8 @@ impl Camera {
         }
 
 +       if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
-            let direction = vec3::random_on_hemisphere(&rec.normal);
-            return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+            let direction = vec3::random_on_hemisphere(rec.normal);
+            return 0.5 * Self::ray_color(&Ray::new(rec.p, direction), depth - 1, world);
         }
 
         let unit_direction = vec3::unit_vector(r.direction());
@@ -1485,7 +1485,7 @@ impl Camera {
 
         if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
 +           let direction = rec.normal + vec3::random_unit_vector();
-            return 0.5 * Self::ray_color(&Ray::new(&rec.p, &direction), depth - 1, world);
+            return 0.5 * Self::ray_color(&Ray::new(rec.p, direction), depth - 1, world);
         }
 
         let unit_direction = vec3::unit_vector(r.direction());
@@ -1634,8 +1634,8 @@ pub trait Material {
 +impl Material for Lambertian {
 +   fn scatter(&self, _r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
 +       let mut scatter_direction = rec.normal + vec3::random_unit_vector();
-+       *scattered = Ray::new(&rec.p, &scatter_direction);
-+      *attenuation = self.albedo;
++       *scattered = Ray::new(rec.p, scatter_direction);
++       *attenuation = self.albedo;
 +       true
 +   }
 +}
@@ -1670,7 +1670,7 @@ impl Material for Lambertian {
 +           scatter_direction = rec.normal;
 +       }
 
-        *scattered = Ray::new(&rec.p, &scatter_direction);
+        *scattered = Ray::new(rec.p, scatter_direction);
         *attenuation = self.albedo;
         true
     }
@@ -1681,12 +1681,12 @@ _[material.rs] Lambertian散射_
 ### 镜面光反射
 
 ```rust
-pub fn random_on_hemisphere(normal: &Vec3) -> Vec3 {
+pub fn random_on_hemisphere(normal: Vec3) -> Vec3 {
     ...
 }
 
-+pub fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
-+   *v - 2.0 * dot(v, n) * *n
++pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
++   v - 2.0 * dot(v, n) * n
 +}
 ```
 _[vec3.rs] vec3 反射函数_
@@ -1706,8 +1706,8 @@ impl Metal {
 
 impl Material for Metal {
   fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
-    let reflected = vec3::reflect(&vec3::unit_vector(r_in.direction()), &rec.normal);
-    *scattered = Ray::new(&rec.p, &reflected);
+    let reflected = vec3::reflect(vec3::unit_vector(r_in.direction()), rec.normal);
+    *scattered = Ray::new(rec.p, reflected);
     *attenuation = self.albedo;
     true
   }
@@ -1813,10 +1813,10 @@ impl Metal {
 
 impl Material for Metal {
     fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
-        let reflected = vec3::reflect(&vec3::unit_vector(r_in.direction()), &rec.normal);
-+       *scattered = Ray::new(&rec.p, &(reflected + self.fuzz * vec3::random_in_unit_sphere()));
+        let reflected = vec3::reflect(vec3::unit_vector(r_in.direction()), rec.normal);
++       *scattered = Ray::new(rec.p, reflected + self.fuzz * vec3::random_in_unit_sphere());
         *attenuation = self.albedo;
-+       vec3::dot(scattered.direction(), &rec.normal) > 0.0
++       vec3::dot(scattered.direction(), rec.normal) > 0.0
     }
 }
 ```
@@ -1840,3 +1840,165 @@ _[main.cc] 带有模糊度的金属球体_
 
 ### 折射
 
+```rust
+pub fn reflect(v: Vec3, n: Vec3) -> Vec3 {
+    v - 2.0 * dot(v, n) * n
+}
+
++pub fn refract(uv: Vec3, n: Vec3, etai_over_etat: f64) -> Vec3 {
++   let cos_theta = dot(-uv, n).min(1.0);
++   let r_out_perp = etai_over_etat * (uv + cos_theta * n);
++   let r_out_parallel = -(1.0 - r_out_perp.length_squared()).abs().sqrt() * n;
++   r_out_perp + r_out_parallel
++}
+```
+_[vec3.rs] 折射函数_
+
+```rust
+pub struct Dielectric {
+  pub ir: f64, // 折射指数
+}
+
+impl Dielectric {
+  pub fn new(index_of_refraction: f64) -> Self {
+    Self {
+      ir: index_of_refraction,
+    }
+  }
+}
+
+impl Material for Dielectric {
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+    *attenuation = Color::new(1.0, 1.0, 1.0);
+    let refraction_ratio = if rec.front_face { 1.0 / self.ir } else { self.ir };
+
+    let unit_direction = vec3::unit_vector(r_in.direction());
+    let refracted = vec3::refract(unit_direction, rec.normal, refraction_ratio);
+
+    *scattered = Ray::new(rec.p, refracted);
+    true
+  }
+}
+```
+_[material.rs] 总是折射的电介质材料类_
+
+![Image 16: 总是折射的玻璃球](../../images/img-1.16-glass-always-refract.png)
+
+### 全内反射
+
+```rust
+impl Material for Dielectric {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+        *attenuation = Color::new(1.0, 1.0, 1.0);
+        let refraction_ratio = if rec.front_face { 1.0 / self.ir } else { self.ir };
+
+        let unit_direction = vec3::unit_vector(r_in.direction());
++       let cos_theta = vec3::dot(-unit_direction, rec.normal).min(1.0);
++       let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
++
++       let cannot_refract = refraction_ratio * sin_theta > 1.0;
++       let direction = if cannot_refract {
++           vec3::reflect(unit_direction, rec.normal)
++       } else {
++           vec3::refract(unit_direction, rec.normal, refraction_ratio)
++       };
+
+        *scattered = Ray::new(rec.p, direction);
+        true
+    }
+}
+```
+_[material.rs] 电介质材料类带有反射_
+
+```rust
+let material_ground = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
+let material_center = Rc::new(material::Lambertian::new(&color::Color::new(0.1, 0.2, 0.5)));
+let material_left = Rc::new(material::Dielectric::new(1.5));
+let material_right = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2), 0.0));
+```
+_[main.rs] 带有电介质和光滑球体的场景_
+
+![Image 17: 有时折射的玻璃球](../../images/img-1.17-glass-sometimes-refract.png)
+
+### Schlick 近似
+
+```rust
+impl Dielectric {
+    ...
+
++   fn reflectance(cosine: f64, ref_idx: f64) -> f64 {
++       // 使用 Schlick's approximation 近似计算反射系数
++       let r0 = (1.0 - ref_idx) / (1.0 + ref_idx);
++       let r0 = r0 * r0;
++       r0 + (1.0 - r0) * (1.0 - cosine).powf(5.0)
++   }
+}
+
+impl Material for Dielectric {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+        *attenuation = Color::new(1.0, 1.0, 1.0);
+        let refraction_ratio = if rec.front_face { 1.0 / self.ir } else { self.ir };
+
+        let unit_direction = vec3::unit_vector(r_in.direction());
+        let cos_theta = vec3::dot(-unit_direction, rec.normal).min(1.0);
+        let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+
+        let cannot_refract = refraction_ratio * sin_theta > 1.0;
++       let direction = if cannot_refract || Self::reflectance(cos_theta, refraction_ratio) > rtweekend::random_double() {
+            vec3::reflect(unit_direction, rec.normal)
+        } else {
+            vec3::refract(unit_direction, rec.normal, refraction_ratio)
+        };
+
+        *scattered = Ray::new(rec.p, direction);
+        true
+    }
+}
+```
+_[material.rs] 完整的玻璃材料_
+
+### 建模一个空心玻璃球
+
+```rust
+fn main() {
+    ...
+
++   let material_ground: Rc<dyn material::Material> = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
++   let material_center: Rc<dyn material::Material> = Rc::new(material::Lambertian::new(&color::Color::new(0.1, 0.2, 0.5)));
++   let material_left: Rc<dyn material::Material> = Rc::new(material::Dielectric::new(1.5));
++   let material_right: Rc<dyn material::Material> = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2), 0.0));
+
+     world.add(Rc::new(Sphere::new(
+        &Point3::new(0.0, -100.5, -1.0),
+        100.0,
+        material_ground,
+    )));
+    world.add(Rc::new(Sphere::new(
+        &Point3::new(0.0, 0.0, -1.0),
+        0.5,
+        material_center,
+    )));
+    world.add(Rc::new(Sphere::new(
+        &Point3::new(-1.0, 0.0, -1.0),
+        0.5,
++       Rc::clone(&material_left),
+    )));
++   world.add(Rc::new(Sphere::new(
++       &Point3::new(-1.0, 0.0, -1.0),
++       -0.4,
++       material_left,
++   )));
+    world.add(Rc::new(Sphere::new(
+        &Point3::new(1.0, 0.0, -1.0),
+        0.5,
+        material_right,
+    )));
+
+    ...
+}
+```
+_[main.rs] 带有空心玻璃球体的场景_
+
+这里将所有材质都改为了`Rc<dyn material::Material>`，方便后续的指针计数`Rc::clone(&material_left)`。
+
+![Image 18: 一个空心的玻璃球](../../images/img-1.18-glass-hollow.png)
