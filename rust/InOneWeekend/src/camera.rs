@@ -10,11 +10,18 @@ pub struct Camera {
   pub image_width: i32,   // Rendered image width in pixel count
   pub samples_per_pixel: usize, // Count of random samples for each pixel
   pub max_depth: i32,     // Maximum number of ray bounces into scene
+  pub vfov: f64,          // Vertical field of view in degrees
+  pub lookfrom: Point3,   // Camera origin
+  pub lookat: Point3,     // Point camera is looking at
+  pub vup: Vec3,          // Camera up vector
   image_height: i32,      // Rendered image height
   center: Point3,         // Camera center
   pixel00_loc: Point3,    // Location of pixel 0, 0
   pixel_delta_u: Vec3,    // Offset to pixel to the right
   pixel_delta_v: Vec3,    // Offset to pixel below
+  u: Vec3,                // Camera horizontal axis
+  v: Vec3,                // Camera vertical axis
+  w: Vec3,                // Camera forward axis
 }
 
 impl Default for Camera {
@@ -24,11 +31,18 @@ impl Default for Camera {
       image_width: 100,
       samples_per_pixel: 10,
       max_depth: 10,
+      vfov: 90.0,
+      lookfrom: Point3::new(0.0, 0.0, -1.0),
+      lookat: Point3::new(0.0, 0.0, 0.0),
+      vup: Vec3::new(0.0, 1.0, 0.0),
       image_height: 0,
       center: Point3::default(),
       pixel00_loc: Point3::default(),
       pixel_delta_u: Vec3::default(),
       pixel_delta_v: Vec3::default(),
+      u: Vec3::default(),
+      v: Vec3::default(),
+      w: Vec3::default(),
     }
   }
 }
@@ -59,16 +73,23 @@ impl Camera {
     self.image_height = (self.image_width as f64 / self.aspect_ratio) as i32;
     self.image_height = if self.image_height < 1 { 1 } else { self.image_height };
 
-    self.center = Point3::default();
+    self.center = self.lookfrom;
 
-    // Determine viewport dimensions.
-    let focal_length = 1.0;
-    let viewport_height = 2.0;
+    // 确定视口尺寸。
+    let focal_length = (self.lookfrom - self.lookat).length();
+    let theta = rtweekend::degrees_to_radians(self.vfov);
+    let h = (theta / 2.0).tan();
+    let viewport_height = 2.0 * h * focal_length;
     let viewport_width = viewport_height * (self.image_width as f64 / self.image_height as f64);
 
+    // 计算相机坐标系的 u,v,w 单位基向量。
+    self.w = vec3::unit_vector(self.lookfrom - self.lookat);
+    self.u = vec3::unit_vector(vec3::cross(self.vup, self.w));
+    self.v = vec3::cross(self.w, self.u);
+
     // 计算水平和垂直视口边缘上的向量。
-    let viewport_u = Vec3::new(viewport_width, 0.0, 0.0);
-    let viewport_v = Vec3::new(0.0, -viewport_height, 0.0);
+    let viewport_u = self.u * viewport_width;
+    let viewport_v = -self.v * viewport_height;
 
     // 计算从像素到像素的水平和垂直增量向量。
     self.pixel_delta_u = viewport_u / self.image_width as f64;
@@ -76,7 +97,9 @@ impl Camera {
 
     // 计算左上角像素的位置。
     let viewport_upper_left = self.center
-      - Vec3::new(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
+      - (focal_length * self.w)
+      - (0.5 * viewport_u)
+      - (0.5 * viewport_v);
     self.pixel00_loc = viewport_upper_left + 0.5 * (self.pixel_delta_u + self.pixel_delta_v);
   }
 

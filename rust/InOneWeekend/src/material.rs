@@ -13,9 +13,9 @@ pub struct Lambertian {
 }
 
 impl Lambertian {
-  pub fn new(a: &Color) -> Self {
+  pub fn new(a: Color) -> Self {
     Self {
-      albedo: *a,
+      albedo: a,
     }
   }
 }
@@ -41,9 +41,9 @@ pub struct Metal {
 }
 
 impl Metal {
-  pub fn new(a: &Color, f: f64) -> Self {
+  pub fn new(a: Color, f: f64) -> Self {
     Self {
-      albedo: *a,
+      albedo: a,
       fuzz: if f < 1.0 { f } else { 1.0 },
     }
   }

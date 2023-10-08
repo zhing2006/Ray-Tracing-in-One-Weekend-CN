@@ -458,17 +458,17 @@ _[main.rs] 渲染一个蓝白渐变_
 ### 射线-球体相交
 
 ```rust
-+fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> bool {
-+   let oc = *center - *r.origin();
++fn hit_sphere(center: Point3, radius: f64, r: &Ray) -> bool {
++   let oc = center - r.origin();
 +   let a = vec3::dot(r.direction(), r.direction());
-+   let b = -2.0 * vec3::dot(r.direction(), &oc);
-+   let c = vec3::dot(&oc, &oc) - radius * radius;
++   let b = -2.0 * vec3::dot(r.direction(), oc);
++   let c = vec3::dot(oc, oc) - radius * radius;
 +   let discriminant = b * b - 4.0 * a * c;
 +   discriminant >= 0.0
 +}
 
 fn ray_color(r: &Ray) -> Color {
-+   if hit_sphere(&Point3::new(0.0, 0.0, -1.0), 0.5, r) {
++   if hit_sphere(Point3::new(0.0, 0.0, -1.0), 0.5, r) {
 +       return Color::new(1.0, 0.0, 0.0);
 +   }
 +
@@ -486,11 +486,11 @@ _[main.rs] 渲染一个红球_
 ### 使用表面法线进行着色
 
 ```rust
-+fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
-    let oc = *center - *r.origin();
++fn hit_sphere(center: Point3, radius: f64, r: &Ray) -> f64 {
+    let oc = center - r.origin();
     let a = vec3::dot(r.direction(), r.direction());
-    let b = -2.0 * vec3::dot(r.direction(), &oc);
-    let c = vec3::dot(&oc, &oc) - radius * radius;
+    let b = -2.0 * vec3::dot(r.direction(), oc);
+    let c = vec3::dot(oc, oc) - radius * radius;
     let discriminant = b * b - 4.0 * a * c;
 
 +   if discriminant < 0.0 {
@@ -501,9 +501,9 @@ _[main.rs] 渲染一个红球_
 }
 
 fn ray_color(r: &Ray) -> Color {
-+   let t = hit_sphere(&Point3::new(0.0, 0.0, -1.0), 0.5, r);
++   let t = hit_sphere(Point3::new(0.0, 0.0, -1.0), 0.5, r);
 +   if t > 0.0 {
-+       let n = vec3::unit_vector(&(r.at(t) - Vec3::new(0.0, 0.0, -1.0)));
++       let n = vec3::unit_vector(r.at(t) - Vec3::new(0.0, 0.0, -1.0));
 +       return 0.5 * Color::new(n.x() + 1.0, n.y() + 1.0, n.z() + 1.0);
 +   }
 
@@ -519,11 +519,11 @@ _[main.rs] 在球体上渲染表面法线_
 ### 简化射线与球体相交代码
 
 ```rust
-fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
-    let oc = *center - *r.origin();
+fn hit_sphere(center: Point3, radius: f64, r: &Ray) -> f64 {
+    let oc = center - r.origin();
     let a = vec3::dot(r.direction(), r.direction());
-    let b = -2.0 * vec3::dot(r.direction(), &oc);
-    let c = vec3::dot(&oc, &oc) - radius * radius;
+    let b = -2.0 * vec3::dot(r.direction(), oc);
+    let c = vec3::dot(oc, oc) - radius * radius;
     let discriminant = b * b - 4.0 * a * c;
 
     if discriminant < 0.0 {
@@ -536,10 +536,10 @@ fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
 _[main.rs] 射线与球体相交代码（之前）_
 
 ```rust
-fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> f64 {
-    let oc = *center - *r.origin();
+fn hit_sphere(center: Point3, radius: f64, r: &Ray) -> f64 {
+    let oc = center - r.origin();
 +   let a = r.direction().length_squared();
-+   let h = vec3::dot(r.direction(), &oc);
++   let h = vec3::dot(r.direction(), oc);
 +   let c = oc.length_squared() - radius * radius;
 +   let discriminant = h * h - a * c;
 
@@ -587,9 +587,9 @@ pub struct Sphere {
 }
 
 impl Sphere {
-  pub fn new(center: &Point3, radius: f64) -> Self {
+  pub fn new(center: Point3, radius: f64) -> Self {
     Self {
-      center: *center,
+      center,
       radius,
     }
   }
@@ -755,7 +755,7 @@ use ray::Ray;
 +};
 +use hittable_list::HittableList;
 
--fn hit_sphere(center: &Point3, radius: f64, r: &Ray) -> bool {
+-fn hit_sphere(center: Point3, radius: f64, r: &Ray) -> bool {
 -   ...
 -}
 
@@ -782,11 +782,11 @@ fn main() {
 +   // World
 +   let mut world = HittableList::default();
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(0.0, 0.0, -1.0),
++       Point3::new(0.0, 0.0, -1.0),
 +       0.5,
 +   )));
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(0.0, -100.5, -1.0),
++       Point3::new(0.0, -100.5, -1.0),
 +       100.0,
 +   )));
 +
@@ -1072,11 +1072,11 @@ fn main() {
     // World
     let mut world = HittableList::default();
     world.add(Rc::new(Sphere::new(
-        &Point3::new(0.0, 0.0, -1.0),
+        Point3::new(0.0, 0.0, -1.0),
         0.5,
     )));
     world.add(Rc::new(Sphere::new(
-        &Point3::new(0.0, -100.5, -1.0),
+        Point3::new(0.0, -100.5, -1.0),
         100.0,
     )));
 
@@ -1587,9 +1587,9 @@ pub struct Sphere {
 }
 
 impl Sphere {
-+   pub fn new(center: &Point3, radius: f64, material: Rc<dyn Material>) -> Self {
++   pub fn new(center: Point3, radius: f64, material: Rc<dyn Material>) -> Self {
         Self {
-            center: *center,
+            center,
             radius,
 +           mat: material,
         }
@@ -1624,7 +1624,7 @@ pub trait Material {
 +}
 +
 +impl Lambertian {
-+   pub fn new(a: &Color) -> Self {
++   pub fn new(a: Color) -> Self {
 +       Self {
 +           albedo: *a,
 +       }
@@ -1697,7 +1697,7 @@ pub struct Metal {
 }
 
 impl Metal {
-  pub fn new(a: &Color) -> Self {
+  pub fn new(a: Color) -> Self {
     Self {
       albedo: *a,
     }
@@ -1753,28 +1753,28 @@ fn main() {
     // World
     let mut world = HittableList::default();
 
-+   let material_ground = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
-+   let material_center = Rc::new(material::Lambertian::new(&color::Color::new(0.7, 0.3, 0.3)));
-+   let material_left = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.8, 0.8)));
-+   let material_right = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2)));
++   let material_ground = Rc::new(material::Lambertian::new(color::Color::new(0.8, 0.8, 0.0)));
++   let material_center = Rc::new(material::Lambertian::new(color::Color::new(0.7, 0.3, 0.3)));
++   let material_left = Rc::new(material::Metal::new(color::Color::new(0.8, 0.8, 0.8)));
++   let material_right = Rc::new(material::Metal::new(color::Color::new(0.8, 0.6, 0.2)));
 +
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(0.0, -100.5, -1.0),
++       Point3::new(0.0, -100.5, -1.0),
 +       100.0,
 +       material_ground,
 +   )));
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(0.0, 0.0, -1.0),
++       Point3::new(0.0, 0.0, -1.0),
 +       0.5,
 +       material_center,
 +   )));
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(-1.0, 0.0, -1.0),
++       Point3::new(-1.0, 0.0, -1.0),
 +       0.5,
 +       material_left,
 +   )));
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(1.0, 0.0, -1.0),
++       Point3::new(1.0, 0.0, -1.0),
 +       0.5,
 +       material_right,
 +   )));
@@ -1803,7 +1803,7 @@ pub struct Metal {
 }
 
 impl Metal {
-+   pub fn new(a: &Color, f: f64) -> Self {
++   pub fn new(a: Color, f: f64) -> Self {
         Self {
             albedo: *a,
 +           fuzz: if f < 1.0 { f } else { 1.0 },
@@ -1825,10 +1825,10 @@ _[material.rs] 金属材质模糊度_
 ```rust
 fn main() {
     ...
-    let material_ground = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
-    let material_center = Rc::new(material::Lambertian::new(&color::Color::new(0.7, 0.3, 0.3)));
-+   let material_left = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.8, 0.8), 0.3));
-+   let material_right = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2), 1.0));
+    let material_ground = Rc::new(material::Lambertian::new(color::Color::new(0.8, 0.8, 0.0)));
+    let material_center = Rc::new(material::Lambertian::new(color::Color::new(0.7, 0.3, 0.3)));
++   let material_left = Rc::new(material::Metal::new(color::Color::new(0.8, 0.8, 0.8), 0.3));
++   let material_right = Rc::new(material::Metal::new(color::Color::new(0.8, 0.6, 0.2), 1.0));
     ...
 }
 ```
@@ -1911,10 +1911,10 @@ impl Material for Dielectric {
 _[material.rs] 电介质材料类带有反射_
 
 ```rust
-let material_ground = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
-let material_center = Rc::new(material::Lambertian::new(&color::Color::new(0.1, 0.2, 0.5)));
+let material_ground = Rc::new(material::Lambertian::new(color::Color::new(0.8, 0.8, 0.0)));
+let material_center = Rc::new(material::Lambertian::new(color::Color::new(0.1, 0.2, 0.5)));
 let material_left = Rc::new(material::Dielectric::new(1.5));
-let material_right = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2), 0.0));
+let material_right = Rc::new(material::Metal::new(color::Color::new(0.8, 0.6, 0.2), 0.0));
 ```
 _[main.rs] 带有电介质和光滑球体的场景_
 
@@ -1963,33 +1963,33 @@ _[material.rs] 完整的玻璃材料_
 fn main() {
     ...
 
-+   let material_ground: Rc<dyn material::Material> = Rc::new(material::Lambertian::new(&color::Color::new(0.8, 0.8, 0.0)));
-+   let material_center: Rc<dyn material::Material> = Rc::new(material::Lambertian::new(&color::Color::new(0.1, 0.2, 0.5)));
++   let material_ground: Rc<dyn material::Material> = Rc::new(material::Lambertian::new(color::Color::new(0.8, 0.8, 0.0)));
++   let material_center: Rc<dyn material::Material> = Rc::new(material::Lambertian::new(color::Color::new(0.1, 0.2, 0.5)));
 +   let material_left: Rc<dyn material::Material> = Rc::new(material::Dielectric::new(1.5));
-+   let material_right: Rc<dyn material::Material> = Rc::new(material::Metal::new(&color::Color::new(0.8, 0.6, 0.2), 0.0));
++   let material_right: Rc<dyn material::Material> = Rc::new(material::Metal::new(color::Color::new(0.8, 0.6, 0.2), 0.0));
 
      world.add(Rc::new(Sphere::new(
-        &Point3::new(0.0, -100.5, -1.0),
+        Point3::new(0.0, -100.5, -1.0),
         100.0,
         material_ground,
     )));
     world.add(Rc::new(Sphere::new(
-        &Point3::new(0.0, 0.0, -1.0),
+        Point3::new(0.0, 0.0, -1.0),
         0.5,
         material_center,
     )));
     world.add(Rc::new(Sphere::new(
-        &Point3::new(-1.0, 0.0, -1.0),
+        Point3::new(-1.0, 0.0, -1.0),
         0.5,
 +       Rc::clone(&material_left),
     )));
 +   world.add(Rc::new(Sphere::new(
-+       &Point3::new(-1.0, 0.0, -1.0),
++       Point3::new(-1.0, 0.0, -1.0),
 +       -0.4,
 +       material_left,
 +   )));
     world.add(Rc::new(Sphere::new(
-        &Point3::new(1.0, 0.0, -1.0),
+        Point3::new(1.0, 0.0, -1.0),
         0.5,
         material_right,
     )));
@@ -2002,3 +2002,260 @@ _[main.rs] 带有空心玻璃球体的场景_
 这里将所有材质都改为了`Rc<dyn material::Material>`，方便后续的指针计数`Rc::clone(&material_left)`。
 
 ![Image 18: 一个空心的玻璃球](../../images/img-1.18-glass-hollow.png)
+
+## 可定位的相机
+
+```rust
+
+pub struct Camera {
+    pub aspect_ratio: f64,  // Ratio of image width over height
+    pub image_width: i32,   // Rendered image width in pixel count
+    pub samples_per_pixel: usize, // Count of random samples for each pixel
+    pub max_depth: i32,     // Maximum number of ray bounces into scene
++   pub vfov: f64,          // Vertical field of view in degrees
+    image_height: i32,      // Rendered image height
+    center: Point3,         // Camera center
+    pixel00_loc: Point3,    // Location of pixel 0, 0
+    pixel_delta_u: Vec3,    // Offset to pixel to the right
+    pixel_delta_v: Vec3,    // Offset to pixel below
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            aspect_ratio: 1.0,
+            image_width: 100,
+            samples_per_pixel: 10,
+            max_depth: 10,
++           vfov: 90.0,
+            image_height: 0,
+            center: Point3::default(),
+            pixel00_loc: Point3::default(),
+            pixel_delta_u: Vec3::default(),
+            pixel_delta_v: Vec3::default(),
+        }
+    }
+}
+
+impl Camera {
+    ...
+
+    fn initialize(&mut self) {
+        self.image_height = (self.image_width as f64 / self.aspect_ratio) as i32;
+        self.image_height = if self.image_height < 1 { 1 } else { self.image_height };
+
+        self.center = Point3::default();
+
+        // 确定视口尺寸。
+        let focal_length = 1.0;
++       let theta = rtweekend::degrees_to_radians(self.vfov);
++       let h = (theta / 2.0).tan();
++       let viewport_height = 2.0 * h * focal_length;
+        let viewport_width = viewport_height * (self.image_width as f64 / self.image_height as f64);
+
+        // 计算水平和垂直视口边缘上的向量。
+        let viewport_u = Vec3::new(viewport_width, 0.0, 0.0);
+        let viewport_v = Vec3::new(0.0, -viewport_height, 0.0);
+
+        // 计算从像素到像素的水平和垂直增量向量。
+        self.pixel_delta_u = viewport_u / self.image_width as f64;
+        self.pixel_delta_v = viewport_v / self.image_height as f64;
+
+        // 计算左上角像素的位置。
+        let viewport_upper_left = self.center
+        - Vec3::new(0.0, 0.0, focal_length) - viewport_u / 2.0 - viewport_v / 2.0;
+        self.pixel00_loc = viewport_upper_left + 0.5 * (self.pixel_delta_u + self.pixel_delta_v);
+    }
+}
+```
+_[camera.rs] 可调视场（fov）的相机_
+
+```rust
+
+fn main() {
+    // World
+    let mut world = HittableList::default();
+
++   let r = (rtweekend::PI / 4.0).cos();
++
++   let material_left: Rc<dyn material::Material>
++       = Rc::new(material::Lambertian::new(color::Color::new(0.0, 0.0, 1.0)));
++   let material_right: Rc<dyn material::Material>
++       = Rc::new(material::Lambertian::new(color::Color::new(1.0, 0.0, 0.0)));
++
++   world.add(Rc::new(Sphere::new(Point3::new(-r, 0.0, -1.0), r, material_left)));
++   world.add(Rc::new(Sphere::new(Point3::new(r, 0.0, -1.0), r, material_right)));
+
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_depth = 50;
+
++   cam.vfov = 90.0;
+
+    // Render
+    cam.render(&world);
+}
+```
+_[main.rs] 宽角相机的场景_
+
+![Image 19: 宽角视图](../../images/img-1.19-wide-view.png)
+
+### 定位和定向相机
+
+```rust
+pub struct Camera {
+    pub aspect_ratio: f64,  // Ratio of image width over height
+    pub image_width: i32,   // Rendered image width in pixel count
+    pub samples_per_pixel: usize, // Count of random samples for each pixel
+    pub max_depth: i32,     // Maximum number of ray bounces into scene
++   pub vfov: f64,          // Vertical field of view in degrees
++   pub lookfrom: Point3,   // Camera origin
++   pub lookat: Point3,     // Point camera is looking at
++   pub vup: Vec3,          // Camera up vector
+    image_height: i32,      // Rendered image height
+    center: Point3,         // Camera center
+    pixel00_loc: Point3,    // Location of pixel 0, 0
+    pixel_delta_u: Vec3,    // Offset to pixel to the right
+    pixel_delta_v: Vec3,    // Offset to pixel below
++   u: Vec3,                // Camera horizontal axis
++   v: Vec3,                // Camera vertical axis
++   w: Vec3,                // Camera forward axis
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            aspect_ratio: 1.0,
+            image_width: 100,
+            samples_per_pixel: 10,
+            max_depth: 10,
++           vfov: 90.0,
++           lookfrom: Point3::new(0.0, 0.0, -1.0),
++           lookat: Point3::new(0.0, 0.0, 0.0),
++           vup: Vec3::new(0.0, 1.0, 0.0),
+            image_height: 0,
+            center: Point3::default(),
+            pixel00_loc: Point3::default(),
+            pixel_delta_u: Vec3::default(),
+            pixel_delta_v: Vec3::default(),
++           u: Vec3::default(),
++           v: Vec3::default(),
++           w: Vec3::default(),
+        }
+    }
+}
+
+impl Camera {
+    ...
+
+    fn initialize(&mut self) {
+        self.image_height = (self.image_width as f64 / self.aspect_ratio) as i32;
+        self.image_height = if self.image_height < 1 { 1 } else { self.image_height };
+
++       self.center = self.lookfrom;
+
+        // 确定视口尺寸。
++       let focal_length = (self.lookfrom - self.lookat).length();
+        let theta = rtweekend::degrees_to_radians(self.vfov);
+        let h = (theta / 2.0).tan();
+        let viewport_height = 2.0 * h * focal_length;
+        let viewport_width = viewport_height * (self.image_width as f64 / self.image_height as f64);
+
++       // 计算相机坐标系的 u,v,w 单位基向量。
++       self.w = vec3::unit_vector(self.lookfrom - self.lookat);
++       self.u = vec3::unit_vector(vec3::cross(self.vup, self.w));
++       self.v = vec3::cross(self.w, self.u);
+
+        // 计算水平和垂直视口边缘上的向量。
++       let viewport_u = self.u * viewport_width;
++       let viewport_v = -self.v * viewport_height;
+
+        // 计算从像素到像素的水平和垂直增量向量。
+        self.pixel_delta_u = viewport_u / self.image_width as f64;
+        self.pixel_delta_v = viewport_v / self.image_height as f64;
+
+        // 计算左上角像素的位置。
++       let viewport_upper_left = self.center
++           - (focal_length * self.w)
++           - (0.5 * viewport_u)
++           - (0.5 * viewport_v);
+        self.pixel00_loc = viewport_upper_left + 0.5 * (self.pixel_delta_u + self.pixel_delta_v);
+    }
+
+    ...
+}
+```
+_[camera.rs] 可定位和可定向的相机_
+
+```rust
+fn main() {
+    // World
+    let mut world = HittableList::default();
+
++   let material_ground: Rc<dyn material::Material>
++       = Rc::new(material::Lambertian::new(color::Color::new(0.8, 0.8, 0.0)));
++   let material_center: Rc<dyn material::Material>
++       = Rc::new(material::Lambertian::new(color::Color::new(0.1, 0.2, 0.5)));
++   let material_left: Rc<dyn material::Material>
++       = Rc::new(material::Dielectric::new(1.5));
++   let material_right: Rc<dyn material::Material>
++       = Rc::new(material::Metal::new(color::Color::new(0.8, 0.6, 0.2), 0.0));
+
++   world.add(Rc::new(Sphere::new(
++       Point3::new(0.0, -100.5, -1.0),
++       100.0,
++       material_ground,
++   )));
++   world.add(Rc::new(Sphere::new(
++       Point3::new(0.0, 0.0, -1.0),
++       0.5,
++       material_center,
++   )));
++   world.add(Rc::new(Sphere::new(
++       Point3::new(-1.0, 0.0, -1.0),
++       0.5,
++       Rc::clone(&material_left),
++   )));
++   world.add(Rc::new(Sphere::new(
++       Point3::new(-1.0, 0.0, -1.0),
++       -0.4,
++       material_left,
++   )));
++   world.add(Rc::new(Sphere::new(
++       Point3::new(1.0, 0.0, -1.0),
++       0.5,
++       material_right,
++   )));
+
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_depth = 50;
+
++   cam.vfov = 90.0;
++   cam.lookfrom = Point3::new(-2.0, 2.0, 1.0);
++   cam.lookat = Point3::new(0.0, 0.0, -1.0);
++   cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    // Render
+    cam.render(&world);
+}
+```
+_[main.rs] 具有替代视点的场景_
+
+![Image 20: 远景](../../images/img-1.20-view-distant.png)
+
+```rust
++   cam.vfov = 20.0;
+```
+_[main.rs] 改变视场_
+
+![Image 21: 放大](../../images/img-1.21-view-zoom.png)
+
+## 失焦模糊
+
