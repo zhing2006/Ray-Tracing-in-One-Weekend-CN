@@ -10,6 +10,7 @@ pub mod camera;
 pub mod material;
 pub mod aabb;
 pub mod bvh;
+pub mod texture;
 
 use std::rc::Rc;
 
@@ -25,10 +26,12 @@ use material::{
   Dielectric,
 };
 use bvh::BvhNode;
+use texture::{
+  Texture,
+  CheckerTexture,
+};
 
-fn main() {
-  let now = std::time::Instant::now();
-
+fn random_spheres() {
   // World
   let mut world = HittableList::default();
 
@@ -111,6 +114,53 @@ fn main() {
 
   // Render
   cam.render(&world);
+}
+
+fn two_spheres() {
+  let mut world = HittableList::default();
+
+  let checker: Rc<dyn Texture> = Rc::new(CheckerTexture::new_with_color(0.8, Color::new(0.2, 0.3, 0.1), Color::new(0.9, 0.9, 0.9)));
+
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, -10.0, 0.0),
+      10.0,
+      Rc::new(Lambertian::new_with_texture(Rc::clone(&checker)))
+    )
+  ));
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, 10.0, 0.0),
+      10.0,
+      Rc::new(Lambertian::new_with_texture(Rc::clone(&checker)))
+    )
+  ));
+
+  let mut cam = Camera::default();
+
+  cam.aspect_ratio = 16.0 / 9.0;
+  cam.image_width = 400;
+  cam.samples_per_pixel = 50;
+  cam.max_depth = 10;
+
+  cam.vfov = 20.0;
+  cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
+  cam.lookat = Point3::new(0.0, 0.0, 0.0);
+  cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+  cam.defocus_angle = 0.0;
+
+  cam.render(&world);
+}
+
+fn main() {
+  let now = std::time::Instant::now();
+
+  match 2 {
+    1 => random_spheres(),
+    2 => two_spheres(),
+    _ => (),
+  }
 
   let elapsed = now.elapsed();
   eprintln!("Elapsed: {}.{:03}s", elapsed.as_secs(), elapsed.subsec_millis());

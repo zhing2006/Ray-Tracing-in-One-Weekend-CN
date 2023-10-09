@@ -725,7 +725,7 @@ Listing 21: [bvh.rs] 构建 BVH 对象范围的边界框
         }
     }
 ```
-Listing 22: [bvh.h] 构建 BVH 对象范围的边界框
+Listing 22: [bvh.rs] 构建 BVH 对象范围的边界框
 
 ```rust
 impl Aabb {
@@ -760,8 +760,275 @@ impl Aabb {
 +   z: interval::UNIVERSE,
 +};
 ```
-Listing 23: [aabb.h] 新的 aabb 常量和 longest_axis() 函数
+Listing 23: [aabb.rs] 新的 aabb 常量和 longest_axis() 函数
 
 
 
 ## 纹理映射
+
+### 常量颜色纹理
+
+```rust
+use super::vec3::Point3;
+use super::color::Color;
+
+pub trait Texture {
+    fn value(&self, u: f64, v: f64, p: Point3) -> Color;
+}
+
+pub struct SolidColor {
+    color_value: Color,
+}
+
+impl SolidColor {
+    pub fn new(color_value: Color) -> Self {
+        Self {
+            color_value,
+        }
+    }
+
+    pub fn new_with_rgb(red: f64, green: f64, blue: f64) -> Self {
+        Self {
+            color_value: Color::new(red, green, blue),
+        }
+    }
+}
+
+impl Texture for SolidColor {
+    fn value(&self, _u: f64, _v: f64, _p: Point3) -> Color {
+        self.color_value
+    }
+}
+```
+Listing 24: [texture.rs] 纹理类
+
+```rust
+#[derive(Clone, Default)]
+pub struct HitRecord {
+    pub p: Point3,
+    pub normal: Vec3,
+    pub mat: Option<Rc<dyn Material>>,
+    pub t: f64,
++   pub u: f64,
++   pub v: f64,
+    pub front_face: bool,
+}
+```
+Listing 25: [hittable.rs] 将 u,v 坐标添加到 hit_record
+
+
+### 实体纹理：棋盘格纹理
+
+```rust
+pub struct CheckerTexture {
+    inv_scale: f64,
+    even: Rc<dyn Texture>,
+    odd: Rc<dyn Texture>,
+}
+
+impl CheckerTexture {
+    pub fn new(scale: f64, even: Rc<dyn Texture>, odd: Rc<dyn Texture>) -> Self {
+        Self {
+            inv_scale: 1.0 / scale,
+            even,
+            odd,
+        }
+    }
+
+    pub fn new_with_color(scale: f64, c1: Color, c2: Color) -> Self {
+        Self {
+            inv_scale: 1.0 / scale,
+            even: Rc::new(SolidColor::new(c1)),
+            odd: Rc::new(SolidColor::new(c2)),
+        }
+    }
+}
+
+impl Texture for CheckerTexture {
+    fn value(&self, u: f64, v: f64, p: Point3) -> Color {
+        let x_integer = (self.inv_scale * p.x()).floor() as i32;
+        let y_integer = (self.inv_scale * p.y()).floor() as i32;
+        let z_integer = (self.inv_scale * p.z()).floor() as i32;
+
+        let is_even = (x_integer + y_integer + z_integer) % 2 == 0;
+
+        if is_even {
+            self.even.value(u, v, p)
+        } else {
+            self.odd.value(u, v, p)
+        }
+    }
+}
+```
+Listing 26: [texture.rs] 棋盘格纹理
+
+```rust
+pub struct Lambertian {
++   pub albedo: Rc<dyn Texture>,
+}
+
+impl Lambertian {
+    pub fn new(a: Color) -> Self {
+        Self {
++           albedo: Rc::new(SolidColor::new(a)),
+        }
+    }
+
++   pub fn new_with_texture(a: Rc<dyn Texture>) -> Self {
++       Self {
++           albedo: a,
++       }
++   }
+}
+
+impl Material for Lambertian {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+        let mut scatter_direction = rec.normal + vec3::random_unit_vector();
+
+        // 捕捉退化的散射方向
+        if scatter_direction.near_zero() {
+            scatter_direction = rec.normal;
+        }
+
+        *scattered = Ray::new_with_time(rec.p, scatter_direction, r_in.time());
++        *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+        true
+    }
+}
+```
+Listing 27: [material.rs] 带有纹理的朗伯材质
+
+```rust
+fn main() {
+    ...
++   let checker: Rc<dyn Texture> = Rc::new(
++       CheckerTexture::new_with_color(0.32, Color::new(0.2, 0.3, 0.1), Color::new(0.9, 0.9, 0.9))
++   );
+    let ground_material: Rc<dyn Material> = Rc::new(
++       Lambertian::new_with_texture(Rc::clone(&checker))
+    );
+    world.add(Rc::new(
+        Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0, ground_material)
+    ));
+    ...
+}
+```
+Listing 28: [main.rs] 使用棋盘格纹理
+
+![图像 2：棋盘格地面上的球体](../../images/img-2.02-checker-ground.png)
+
+
+### 渲染实体棋盘格纹理
+
+```rust
+fn random_spheres() {
+    ...
+    let ground_material: Rc<dyn Material> = Rc::new(
+        Lambertian::new(color::Color::new(0.5, 0.5, 0.5))
+    );
+    world.add(Rc::new(
+        Sphere::new(Point3::new(0.0, -1000.0, 0.0), 1000.0, ground_material)
+    ));
+    ...
+}
+
+fn main() {
+    random_spheres();
+}
+```
+Listing 29: [main.rs] 主函数调用选定的场景
+
+```rust
+fn two_spheres() {
+    let mut world = HittableList::default();
+
+    let checker: Rc<dyn Texture> = Rc::new(CheckerTexture::new_with_color(0.8, Color::new(0.2, 0.3, 0.1), Color::new(0.9, 0.9, 0.9)));
+
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, -10.0, 0.0),
+            10.0,
+            Rc::new(Lambertian::new_with_texture(Rc::clone(&checker)))
+        )
+    ));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, 10.0, 0.0),
+            10.0,
+            Rc::new(Lambertian::new_with_texture(Rc::clone(&checker)))
+        )
+    ));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
+
+    cam.vfov = 20.0;
+    cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
+    cam.lookat = Point3::new(0.0, 0.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+    match 2 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        _ => (),
+    }
+}
+```
+Listing 30: [main.rs] 两个带纹理的球体
+
+![图像 3：棋盘格球体](../../images/img-2.03-checker-spheres.png)
+
+
+### 球体的纹理坐标
+
+```rust
+impl Sphere {
+    ...
+
++    fn get_sphere_uv(p: Point3, u: &mut f64, v: &mut f64) {
++       // p: a given point on the sphere of radius one, centered at the origin.
++       // u: returned value [0,1] of angle around the Y axis from X=-1.
++       // v: returned value [0,1] of angle from Y=-1 to Y=+1.
++       //     <1 0 0> yields <0.50 0.50>       <-1  0  0> yields <0.00 0.50>
++       //     <0 1 0> yields <0.50 1.00>       < 0 -1  0> yields <0.50 0.00>
++       //     <0 0 1> yields <0.25 0.50>       < 0  0 -1> yields <0.75 0.50>
++
++       let theta = (-p.y()).acos();
++       let phi = (-p.z()).atan2(p.x()) + rtweekend::PI;
++
++       *u = phi / (2.0 * rtweekend::PI);
++       *v = theta / rtweekend::PI;
++   }
+}
+```
+Listing 31: [sphere.rs] get_sphere_uv 函数
+
+```rust
+impl Hittable for Sphere {
+    fn hit(&self, r: &Ray, ray_t: &Interval, hit_record: &mut HitRecord) -> bool {
+        ...
+        hit_record.p = r.at(hit_record.t);
+        let outward_normal = (hit_record.p - self.center1) / self.radius;
+        hit_record.set_face_normal(r, outward_normal);
++       Self::get_sphere_uv(outward_normal, &mut hit_record.u, &mut hit_record.v);
+        hit_record.mat = Some(Rc::clone(&self.mat));
+
+        true
+    }
+    ...
+}
+```
+Listing 32: [sphere.rs] 从命中点获取球体的UV坐标
+
+
+### 访问纹理图像数据
