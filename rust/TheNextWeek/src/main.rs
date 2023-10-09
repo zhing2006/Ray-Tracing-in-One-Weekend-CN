@@ -8,6 +8,8 @@ pub mod rtweekend;
 pub mod interval;
 pub mod camera;
 pub mod material;
+pub mod aabb;
+pub mod bvh;
 
 use std::rc::Rc;
 
@@ -22,8 +24,11 @@ use material::{
   Metal,
   Dielectric,
 };
+use bvh::BvhNode;
 
 fn main() {
+  let now = std::time::Instant::now();
+
   // World
   let mut world = HittableList::default();
 
@@ -87,6 +92,8 @@ fn main() {
     Sphere::new(Point3::new(4.0, 1.0, 0.0), 1.0, material3)
   ));
 
+  let world = HittableList::new(Rc::new(BvhNode::new(&mut world)));
+
   // Camera
   let mut cam = Camera::default();
   cam.aspect_ratio = 16.0 / 9.0;
@@ -104,4 +111,7 @@ fn main() {
 
   // Render
   cam.render(&world);
+
+  let elapsed = now.elapsed();
+  eprintln!("Elapsed: {}.{:03}s", elapsed.as_secs(), elapsed.subsec_millis());
 }

@@ -4,6 +4,7 @@ use super::vec3::{self, Vec3, Point3};
 use super::ray::Ray;
 use super::interval::Interval;
 use super::material::Material;
+use super::aabb::Aabb;
 
 #[derive(Clone, Default)]
 pub struct HitRecord {
@@ -16,6 +17,7 @@ pub struct HitRecord {
 
 pub trait Hittable {
   fn hit(&self, r: &Ray, ray_t: &Interval, hit_record: &mut HitRecord) -> bool;
+  fn bounding_box(&self) -> &Aabb;
 }
 
 impl HitRecord {

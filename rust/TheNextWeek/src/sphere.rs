@@ -12,6 +12,7 @@ use super::hittable::{
 };
 use super::interval::Interval;
 use super::material::Material;
+use super::aabb::Aabb;
 
 pub struct Sphere {
   center1: Point3,
@@ -19,26 +20,33 @@ pub struct Sphere {
   mat: Rc<dyn Material>,
   is_moving: bool,
   center_vec: Vec3,
+  bbox: Aabb,
 }
 
 impl Sphere {
   pub fn new(center: Point3, radius: f64, material: Rc<dyn Material>) -> Self {
+    let rvec = Vec3::new(radius, radius, radius);
     Self {
       center1: center,
       radius,
       mat: material,
       is_moving: false,
       center_vec: Vec3::default(),
+      bbox: Aabb::new_with_point(&(center - rvec), &(center + rvec)),
     }
   }
 
   pub fn new_with_center2(center1: Point3, center2: Point3, radius: f64, material: Rc<dyn Material>) -> Self {
+    let rvec = Vec3::new(radius, radius, radius);
+    let box1 = Aabb::new_with_point(&(center1 - rvec), &(center1 + rvec));
+    let box2 = Aabb::new_with_point(&(center2 - rvec), &(center2 + rvec));
     Self {
       center1,
       radius,
       mat: material,
       is_moving: true,
       center_vec: center2 - center1,
+      bbox: Aabb::new_with_box(&box1, &box2),
     }
   }
 
@@ -77,5 +85,9 @@ impl Hittable for Sphere {
     hit_record.mat = Some(Rc::clone(&self.mat));
 
     true
+  }
+
+  fn bounding_box(&self) -> &Aabb {
+    &self.bbox
   }
 }
