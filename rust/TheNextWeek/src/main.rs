@@ -11,6 +11,7 @@ pub mod material;
 pub mod aabb;
 pub mod bvh;
 pub mod texture;
+pub mod rtw_stb_image;
 
 use std::rc::Rc;
 
@@ -29,6 +30,7 @@ use bvh::BvhNode;
 use texture::{
   Texture,
   CheckerTexture,
+  ImageTexture,
 };
 
 fn random_spheres() {
@@ -153,12 +155,35 @@ fn two_spheres() {
   cam.render(&world);
 }
 
+fn earth() {
+  let earth_texture: Rc<dyn Texture> = Rc::new(ImageTexture::new("earthmap.jpg"));
+  let earth_surface: Rc<dyn Material> = Rc::new(Lambertian::new_with_texture(Rc::clone(&earth_texture)));
+  let globe = Rc::new(Sphere::new(Point3::new(0.0, 0.0, 0.0), 2.0, earth_surface));
+
+  let mut cam = Camera::default();
+
+  cam.aspect_ratio = 16.0 / 9.0;
+  cam.image_width = 400;
+  cam.samples_per_pixel = 50;
+  cam.max_depth = 10;
+
+  cam.vfov = 20.0;
+  cam.lookfrom = Point3::new(0.0, 0.0, 12.0);
+  cam.lookat = Point3::new(0.0, 0.0, 0.0);
+  cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+  cam.defocus_angle = 0.0;
+
+  cam.render(&HittableList::new(globe));
+}
+
 fn main() {
   let now = std::time::Instant::now();
 
-  match 2 {
+  match 3 {
     1 => random_spheres(),
     2 => two_spheres(),
+    3 => earth(),
     _ => (),
   }
 

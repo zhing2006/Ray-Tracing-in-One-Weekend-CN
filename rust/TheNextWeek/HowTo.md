@@ -1032,3 +1032,207 @@ Listing 32: [sphere.rs] 从命中点获取球体的UV坐标
 
 
 ### 访问纹理图像数据
+
+修改Cargo.toml文件，引入stb_image库。
+
+```toml
+[package]
+name = "the_next_week"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0"
+stb_image = "0.2"
+```
+
+```rust
+use stb_image::image;
+
+pub const BYTES_PER_PIXEL: usize = 3;
+static MAGENTA: [u8; BYTES_PER_PIXEL] = [255, 0, 255];
+
+#[derive(Default)]
+pub struct RtwImage {
+    data: Vec<u8>,
+    image_width: usize,
+    image_height: usize,
+    bytes_per_scanline: usize,
+}
+
+impl RtwImage {
+    pub fn new(image_filename: &str) -> Self {
+        // 从指定的文件加载图像数据。如果定义了 RTW_IMAGES 环境变量，则仅在该目录中查找图像文件。
+        // 如果未找到图像，则首先从当前目录，然后在 images/ 子目录中，然后在父级的 images/ 子目录中，
+        // 依此类推，最多向上搜索六级。如果图像加载失败，width() 和 height() 将返回 0。
+
+        let filename = image_filename;
+        let imagedir = std::env::var("RTW_IMAGES").unwrap_or_else(|_| String::from("images"));
+
+        let mut _self = Self::default();
+        if !imagedir.is_empty() && _self.load(&format!("{}/{}", imagedir, filename)) {
+            return _self;
+        }
+        if _self.load(filename) {
+            return _self;
+        }
+        if _self.load(&format!("images/{}", filename)) {
+            return _self;
+        }
+        if _self.load(&format!("../images/{}", filename)) {
+            return _self;
+        }
+        if _self.load(&format!("../../images/{}", filename)) {
+            return _self;
+        }
+        if _self.load(&format!("../../../images/{}", filename)) {
+            return _self;
+        }
+        if _self.load(&format!("../../../../images/{}", filename)) {
+            return _self;
+        }
+        if _self.load(&format!("../../../../../images/{}", filename)) {
+            return _self;
+        }
+        if _self.load(&format!("../../../../../../images/{}", filename)) {
+            return _self;
+        }
+        panic!("ERROR: Could not load image file \"{}\".", filename);
+    }
+
+    pub fn load(&mut self, filename: &str) -> bool {
+        // 从给定的文件名加载图像数据。如果加载成功，返回 true。
+        let load_result = image::load_with_depth(
+            filename,
+            BYTES_PER_PIXEL,
+            false,
+        );
+        match load_result {
+            image::LoadResult::Error(_) => {
+                false
+            },
+            image::LoadResult::ImageU8(image) => {
+                assert_eq!(image.depth, BYTES_PER_PIXEL);
+                self.data = image.data;
+                self.image_width = image.width;
+                self.image_height = image.height;
+                self.bytes_per_scanline = image.depth /* 原始每像素组件数的虚拟输出参数 */ * image.width;
+                true
+            },
+            image::LoadResult::ImageF32(_) => {
+                false
+            },
+        }
+    }
+
+    pub fn width(&self) -> usize {
+        if self.data.is_empty() { 0 } else { self.image_width }
+    }
+    pub fn height(&self) -> usize {
+        if self.data.is_empty() { 0 } else { self.image_height }
+    }
+
+    pub fn pixel_data(&self, x: usize, y: usize) -> &[u8] {
+        // 返回坐标为 x,y 的像素的三个字节的地址（如果没有数据，则返回品红色）。
+        if self.data.is_empty() {
+            &MAGENTA
+        } else {
+            let x = Self::clamp(x, 0, self.image_width);
+            let y = Self::clamp(y, 0, self.image_height);
+
+            &self.data[(y * self.bytes_per_scanline) + (x * BYTES_PER_PIXEL)..(y * self.bytes_per_scanline) + (x * BYTES_PER_PIXEL) + BYTES_PER_PIXEL]
+        }
+    }
+
+    fn clamp(x: usize, low: usize, high: usize) -> usize {
+        if x < low {
+            return low;
+        }
+        if x < high {
+            return x;
+        }
+        high - 1
+    }
+}
+```
+Listing 33: [rtw_stb_image.rs] rtw_image 辅助类
+
+```rust
+pub struct ImageTexture {
+    image: RtwImage,
+}
+
+impl ImageTexture {
+    pub fn new(filename: &str) -> Self {
+        Self {
+            image: RtwImage::new(filename),
+        }
+    }
+}
+
+impl Texture for ImageTexture {
+    fn value(&self, u: f64, v: f64, _p: Point3) -> Color {
+        // 如果没有纹理数据，则返回固定的青色作为调试辅助。
+        if self.image.height() == 0 {
+            return Color::new(0.0, 1.0, 1.0);
+        }
+
+        // 将输入的纹理坐标限制在 [0,1] x [1,0] 范围内
+        let u = Interval::new(0.0, 1.0).clamp(u);
+        let v = 1.0 - Interval::new(0.0, 1.0).clamp(v);
+
+        let i = (u * self.image.width() as f64) as usize;
+        let j = (v * self.image.height() as f64) as usize;
+        let pixel = self.image.pixel_data(i, j);
+
+        let color_scale = 1.0 / 255.0;
+        Color::new(
+            color_scale * pixel[0] as f64,
+            color_scale * pixel[1] as f64,
+            color_scale * pixel[2] as f64,
+        )
+    }
+}
+```
+Listing 34: [texture.rs] 图像纹理类
+
+
+### 渲染图像纹理
+
+```rust
+fn earth() {
+    let earth_texture: Rc<dyn Texture> = Rc::new(ImageTexture::new("earthmap.jpg"));
+    let earth_surface: Rc<dyn Material> = Rc::new(Lambertian::new_with_texture(Rc::clone(&earth_texture)));
+    let globe = Rc::new(Sphere::new(Point3::new(0.0, 0.0, 0.0), 2.0, earth_surface));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
+
+    cam.vfov = 20.0;
+    cam.lookfrom = Point3::new(0.0, 0.0, 12.0);
+    cam.lookat = Point3::new(0.0, 0.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&HittableList::new(globe));
+}
+
+fn main() {
+    match 3 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        3 => earth(),
+        _ => (),
+    }
+}
+```
+
+![图像 5：贴有地球贴图的球体](../../images/img-2.05-earth-sphere.png)
+
+
+## Perlin噪声

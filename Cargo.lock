@@ -3,6 +3,15 @@
 version = 3
 
 [[package]]
+name = "cc"
+version = "1.0.83"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -69,10 +78,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "stb_image"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e865fe63d814d367599a0198cb95049f7e81ea4fd5c6b302c825278a2b43c064"
+dependencies = [
+ "cc",
+ "libc",
+]
+
+[[package]]
 name = "the_next_week"
 version = "0.1.0"
 dependencies = [
  "rand",
+ "stb_image",
 ]
 
 [[package]]
