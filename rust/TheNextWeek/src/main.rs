@@ -12,6 +12,7 @@ pub mod aabb;
 pub mod bvh;
 pub mod texture;
 pub mod rtw_stb_image;
+pub mod perlin;
 
 use std::rc::Rc;
 
@@ -31,6 +32,7 @@ use texture::{
   Texture,
   CheckerTexture,
   ImageTexture,
+  NoiseTexture,
 };
 
 fn random_spheres() {
@@ -177,13 +179,50 @@ fn earth() {
   cam.render(&HittableList::new(globe));
 }
 
+fn two_perlin_spheres() {
+  let mut world = HittableList::default();
+
+  let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::default());
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, -1000.0, 0.0),
+      1000.0,
+      Rc::new(Lambertian::new_with_texture(Rc::clone(&pertext)))
+    )
+  ));
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, 2.0, 0.0),
+      2.0,
+      Rc::new(Lambertian::new_with_texture(Rc::clone(&pertext)))
+    )
+  ));
+
+  let mut cam = Camera::default();
+
+  cam.aspect_ratio = 16.0 / 9.0;
+  cam.image_width = 400;
+  cam.samples_per_pixel = 50;
+  cam.max_depth = 10;
+
+  cam.vfov = 20.0;
+  cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
+  cam.lookat = Point3::new(0.0, 0.0, 0.0);
+  cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+  cam.defocus_angle = 0.0;
+
+  cam.render(&world);
+}
+
 fn main() {
   let now = std::time::Instant::now();
 
-  match 3 {
+  match 4 {
     1 => random_spheres(),
     2 => two_spheres(),
     3 => earth(),
+    4 => two_perlin_spheres(),
     _ => (),
   }
 

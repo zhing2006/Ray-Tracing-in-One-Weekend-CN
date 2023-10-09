@@ -1231,8 +1231,136 @@ fn main() {
     }
 }
 ```
+Listing 35: [main.rs] 使用 stb_image 加载图像
 
 ![图像 5：贴有地球贴图的球体](../../images/img-2.05-earth-sphere.png)
 
 
 ## Perlin噪声
+
+```rust
+use super::vec3::Point3;
+use super::rtweekend;
+
+const POINT_COUNT: usize = 256;
+
+pub struct Perlin {
+    ranfloat: Vec<f64>,
+    perm_x: Vec<i32>,
+    perm_y: Vec<i32>,
+    perm_z: Vec<i32>,
+}
+
+impl Default for Perlin {
+    fn default() -> Self {
+        let mut ranfloat = Vec::with_capacity(POINT_COUNT);
+        for _ in 0..POINT_COUNT {
+            ranfloat.push(rtweekend::random_double());
+        }
+        let perm_x = Self::perlin_generate_perm();
+        let perm_y = Self::perlin_generate_perm();
+        let perm_z = Self::perlin_generate_perm();
+        Self {
+            ranfloat,
+            perm_x,
+            perm_y,
+            perm_z,
+        }
+    }
+}
+
+impl Perlin {
+    pub fn noise(&self, p: Point3) -> f64 {
+        let i = ((4.0 * p.x()) as i32) & 255;
+        let j = ((4.0 * p.y()) as i32) & 255;
+        let k = ((4.0 * p.z()) as i32) & 255;
+
+        self.ranfloat[
+            self.perm_x[i] as usize ^
+            self.perm_y[j] as usize ^
+            self.perm_z[k] as usize
+        ]
+    }
+    fn perlin_generate_perm() -> Vec<i32> {
+        let mut p = Vec::with_capacity(POINT_COUNT);
+        for i in 0..POINT_COUNT {
+            p.push(i as i32);
+        }
+        Self::permute(&mut p, POINT_COUNT);
+        p
+    }
+
+    fn permute(p: &mut [i32], n: usize) {
+        for i in (0..n).rev() {
+            let target = rtweekend::random_int(0, i as i32);
+            p.swap(i, target as usize);
+        }
+    }
+}
+```
+Listing 36: [perlin.rs] Perlin纹理类和函数
+
+```rust
+#[derive(Default)]
+pub struct NoiseTexture {
+    noise: Perlin,
+}
+
+impl Texture for NoiseTexture {
+    fn value(&self, _u: f64, _v: f64, p: Point3) -> Color {
+        Color::new(1.0, 1.0, 1.0) * self.noise.noise(p)
+    }
+}
+```
+Listing 37: [texture.rs] 噪声纹理
+
+```rust
+fn two_perlin_spheres() {
+    let mut world = HittableList::default();
+
+    let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::default());
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, -1000.0, 0.0),
+            1000.0,
+            Rc::new(Lambertian::new_with_texture(Rc::clone(&pertext)))
+        )
+    ));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, 2.0, 0.0),
+            2.0,
+            Rc::new(Lambertian::new_with_texture(Rc::clone(&pertext)))
+        )
+    ));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
+
+    cam.vfov = 20.0;
+    cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
+    cam.lookat = Point3::new(0.0, 0.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+    match 4 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        3 => earth(),
+        4 => two_perlin_spheres(),
+        _ => (),
+    }
+}
+```
+Listing 38: [main.cc] 带有两个Perlin纹理球体的场景
+
+![图像 9：哈希随机纹理](../../images/img-2.09-hash-random.png)
