@@ -182,7 +182,7 @@ fn earth() {
 fn two_perlin_spheres() {
   let mut world = HittableList::default();
 
-  let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::default());
+  let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::new(4.0));
   world.add(Rc::new(
     Sphere::new(
       Point3::new(0.0, -1000.0, 0.0),

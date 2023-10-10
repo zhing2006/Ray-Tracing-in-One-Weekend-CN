@@ -1361,6 +1361,246 @@ fn main() {
     }
 }
 ```
-Listing 38: [main.cc] 带有两个Perlin纹理球体的场景
+Listing 38: [main.rs] 带有两个Perlin纹理球体的场景
 
 ![图像 9：哈希随机纹理](../../images/img-2.09-hash-random.png)
+
+
+### 平滑结果
+
+```rust
+impl Perlin {
++   pub fn noise(&self, p: Point3) -> f64 {
++       let u = p.x() - p.x().floor();
++       let v = p.y() - p.y().floor();
++       let w = p.z() - p.z().floor();
++
++       let i = p.x().floor() as i32;
++       let j = p.y().floor() as i32;
++       let k = p.z().floor() as i32;
++       let mut c = [[[0.0; 2]; 2]; 2];
++
++       (0..2).for_each(|di| {
++           (0..2).for_each(|dj| {
++               (0..2).for_each(|dk| {
++                   c[di][dj][dk] = self.ranfloat[
++                       self.perm_x[((i + di as i32) & 255) as usize] as usize ^
++                       self.perm_y[((j + dj as i32) & 255) as usize] as usize ^
++                       self.perm_z[((k + dk as i32) & 255) as usize] as usize
++                   ];
++               })
++           })
++       });
++
++       Self::trilinear_interp(&c, u, v, w)
++   }
++   ...
++   fn trilinear_interp(c: &[[[f64; 2]; 2]; 2], u: f64, v: f64, w: f64) -> f64 {
++       let mut accum = 0.0;
++       (0..2).for_each(|i| {
++           (0..2).for_each(|j| {
++               (0..2).for_each(|k| {
++                   accum += (i as f64 * u + (1 - i) as f64 * (1.0 - u)) *
++                           (j as f64 * v + (1 - j) as f64 * (1.0 - v)) *
++                           (k as f64 * w + (1 - k) as f64 * (1.0 - w)) * c[i][j][k];
++               })
++           })
++       });
++       accum
++   }
+}
+```
+Listing 39: [perlin.rs] 带有三线性插值的Perlin纹理
+
+![图像 10：带有三线性插值的Perlin纹理](../../images/img-2.10-perlin-trilerp.png)
+
+
+### 改进的Hermite平滑
+
+```rust
+impl Perlin {
+    pub fn noise(&self, p: Point3) -> f64 {
+        let u = p.x() - p.x().floor();
+        let v = p.y() - p.y().floor();
+        let w = p.z() - p.z().floor();
++       let u = u * u * (3.0 - 2.0 * u);
++       let v = v * v * (3.0 - 2.0 * v);
++       let w = w * w * (3.0 - 2.0 * w);
+
+        let i = p.x().floor() as i32;
+        let j = p.y().floor() as i32;
+        let k = p.z().floor() as i32;
+        ...
+    }
+}
+```
+Listing 40: [perlin.rs] 带有Hermite平滑的Perlin纹理
+
+![图像 11：Perlin纹理，三线性插值，平滑](../../images/img-2.11-perlin-trilerp-smooth.png)
+
+
+### 调整频率
+
+```rust
+pub struct NoiseTexture {
+    noise: Perlin,
++   scale: f64,
+}
+
++impl Default for NoiseTexture {
++   fn default() -> Self {
++       Self {
++           noise: Perlin::default(),
++           scale: 1.0,
++       }
++   }
++}
+
++impl NoiseTexture {
++   pub fn new(scale: f64) -> Self {
++       Self {
++           noise: Perlin::default(),
++           scale,
++       }
++   }
++}
+
+impl Texture for NoiseTexture {
+    fn value(&self, _u: f64, _v: f64, p: Point3) -> Color {
++       Color::new(1.0, 1.0, 1.0) * self.noise.noise(self.scale * p)
+    }
+}
+```
+Listing 41: [texture.rs] 带有缩放的平滑Perlin纹理
+
+```rust
+fn two_perlin_spheres() {
+    let mut world = HittableList::default();
+
++   let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::new(4.0));
+    ...
+}
+```
+Listing 42: [main.rs] 带有缩放的Perlin纹理球体
+
+![图像 12：Perlin纹理，更高的频率](../../images/img-2.12-perlin-hifreq.png)
+
+
+### 在格点上使用随机向量
+
+```rust
+impl Perlin {
+    pub fn noise(&self, p: Point3) -> f64 {
++-      let u = p.x() - p.x().floor();
++-      let v = p.y() - p.y().floor();
++-      let w = p.z() - p.z().floor();
+        let i = p.x().floor() as i32;
+        let j = p.y().floor() as i32;
+        let k = p.z().floor() as i32;
++       let mut c = [[[Vec3::default(); 2]; 2]; 2];
+
+        (0..2).for_each(|di| {
+            (0..2).for_each(|dj| {
+                (0..2).for_each(|dk| {
++                   c[di][dj][dk] = self.ranvec[
+                        self.perm_x[((i + di as i32) & 255) as usize] as usize ^
+                        self.perm_y[((j + dj as i32) & 255) as usize] as usize ^
+                        self.perm_z[((k + dk as i32) & 255) as usize] as usize
+                    ];
+                })
+            })
+        });
+
+        Self::trilinear_interp(&c, u, v, w)
+    }
+  ...
+}
+```
+Listing 44: [perlin.rs] 带有新的noise()方法的Perlin类
+
+```rust
+impl Perlin {
+    ...
++   fn trilinear_interp(c: &[[[Vec3; 2]; 2]; 2], u: f64, v: f64, w: f64) -> f64 {
++       let uu = u * u * (3.0 - 2.0 * u);
++       let vv = v * v * (3.0 - 2.0 * v);
++       let ww = w * w * (3.0 - 2.0 * w);
++       let mut accum = 0.0;
+
++       (0..2).for_each(|i| {
++           (0..2).for_each(|j| {
++               (0..2).for_each(|k| {
++                   let weight_v = Vec3::new(u - i as f64, v - j as f64, w - k as f64);
++                   accum += (i as f64 * uu + (1 - i) as f64 * (1.0 - uu))
++                          * (j as f64 * vv + (1 - j) as f64 * (1.0 - vv))
++                          * (k as f64 * ww + (1 - k) as f64 * (1.0 - ww))
++                          * vec3::dot(c[i][j][k], weight_v);
++               })
++           })
++       });
++       accum
++   }
+}
+```
+Listing 45: [perlin.rs] 迄今为止的Perlin插值函数
+
+```rust
+impl Texture for NoiseTexture {
+    fn value(&self, _u: f64, _v: f64, p: Point3) -> Color {
++       Color::new(1.0, 1.0, 1.0) * 0.5 * (1.0 + self.noise.noise(self.scale * p))
+    }
+}
+```
+Listing 46: [texture.rs] 带有缩放的平滑Perlin纹理
+
+![图像 13：Perlin纹理，偏离整数值](../../images/img-2.13-perlin-shift.png)
+
+
+### 介绍湍流
+
+```rust
+impl Perlin {
+    ...
++   pub fn turb(&self, p: Point3, depth: i32) -> f64 {
++       let mut accum = 0.0;
++       let mut temp_p = p;
++       let mut weight = 1.0;
+
++       for _ in 0..depth {
++           accum += weight * self.noise(temp_p);
++           weight *= 0.5;
++           temp_p *= 2.0;
++       }
+
++       accum.abs()
++   }
+    ...
+}
+```
+Listing 47: [perlin.rs] 湍流函数
+
+```rust
+impl Texture for NoiseTexture {
+    fn value(&self, _u: f64, _v: f64, p: Point3) -> Color {
+        let s = self.scale * p;
+        Color::new(1.0, 1.0, 1.0) * self.noise.turb(s, 7)
+    }
+}
+```
+Listing 48: [texture.rs] 具有湍流的噪声纹理
+
+![图像 14：具有湍流的 Perlin 纹理](../../images/img-2.14-perlin-turb.png)
+
+
+### 调整相位
+
+```rust
+impl Texture for NoiseTexture {
+    fn value(&self, _u: f64, _v: f64, p: Point3) -> Color {
+        let s = self.scale * p;
++       Color::new(1.0, 1.0, 1.0) * 0.5 * (1.0 + (s.z() + 10.0 * self.noise.turb(s, 7)).sin())
+    }
+}
+```
+
+![图像 15：Perlin 噪声，大理石纹理](../../images/img-2.15-perlin-marble.png)
