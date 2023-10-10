@@ -1,4 +1,7 @@
-use super::vec3::Point3;
+use super::vec3::{
+  Vec3,
+  Point3,
+};
 use super::interval::{
   self,
   Interval,
@@ -139,3 +142,27 @@ pub const UNIVERSE: Aabb = Aabb {
   y: interval::UNIVERSE,
   z: interval::UNIVERSE,
 };
+
+impl std::ops::Add<Vec3> for &Aabb {
+  type Output = Aabb;
+
+  fn add(self, rhs: Vec3) -> Self::Output {
+    Aabb {
+      x: &self.x + rhs.x(),
+      y: &self.y + rhs.y(),
+      z: &self.z + rhs.z(),
+    }
+  }
+}
+
+impl std::ops::Add<&Aabb> for Vec3 {
+  type Output = Aabb;
+
+  fn add(self, rhs: &Aabb) -> Self::Output {
+    Aabb {
+      x: self.x() + &rhs.x,
+      y: self.y() + &rhs.y,
+      z: self.z() + &rhs.z,
+    }
+  }
+}

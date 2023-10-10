@@ -2311,7 +2311,7 @@ fn main() {
     }
 }
 ```
-Listing 63: [main.cc] 康奈尔盒场景，空的
+Listing 63: [main.rs] 康奈尔盒场景，空的
 
 ![图 19: 空的康奈尔盒](../../images/img-2.19-cornell-empty.png)
 
@@ -2319,3 +2319,570 @@ Listing 63: [main.cc] 康奈尔盒场景，空的
 
 ## 实例
 
+```rust
+pub fn make_box(a: Point3, b: Point3, mat: Rc<dyn Material>) -> Rc<HittableList> {
+    // 返回一个包含两个对角顶点a和b的3D盒子（六个面）。
+
+    let mut sides = HittableList::default();
+
+    // 构造两个对角顶点，具有最小和最大的坐标。
+    let min = Point3::new(
+        a.x().min(b.x()),
+        a.y().min(b.y()),
+        a.z().min(b.z()),
+    );
+    let max = Point3::new(
+        a.x().max(b.x()),
+        a.y().max(b.y()),
+        a.z().max(b.z()),
+    );
+
+    let dx = Vec3::new(max.x() - min.x(), 0.0, 0.0);
+    let dy = Vec3::new(0.0, max.y() - min.y(), 0.0);
+    let dz = Vec3::new(0.0, 0.0, max.z() - min.z());
+
+    sides.add(Rc::new(
+        Quad::new(Point3::new(min.x(), min.y(), max.z()), dx, dy, Rc::clone(&mat))
+    ));
+    sides.add(Rc::new(
+        Quad::new(Point3::new(max.x(), max.y(), min.z()), -dz, dy, Rc::clone(&mat))
+    ));
+    sides.add(Rc::new(
+        Quad::new(Point3::new(max.x(), min.y(), min.z()), -dx, dy, Rc::clone(&mat))
+    ));
+    sides.add(Rc::new(
+        Quad::new(Point3::new(min.x(), min.y(), min.z()), dz, dy, Rc::clone(&mat))
+    ));
+    sides.add(Rc::new(
+        Quad::new(Point3::new(min.x(), max.y(), max.z()), dx, -dz, Rc::clone(&mat))
+    ));
+    sides.add(Rc::new(
+        Quad::new(Point3::new(min.x(), min.y(), min.z()), dx, dz, Rc::clone(&mat))
+    ));
+
+    Rc::new(sides)
+}
+```
+Listing 64: [quad.rs] 一个盒子对象
+
+```rust
+fn cornell_box() {
+    ...
+    world.add(make_box(
+        Point3::new(130.0, 0.0, 65.0),
+        Point3::new(295.0, 165.0, 230.0),
+        Rc::clone(&white)
+    ));
+    world.add(make_box(
+        Point3::new(265.0, 0.0, 295.0),
+        Point3::new(430.0, 330.0, 460.0),
+        Rc::clone(&white)
+    ));
+    ...
+}
+```
+Listing 65: [main.rs] 添加盒子对象
+
+![图 20: 包含两个方块的康奈尔盒](../../images/img-2.20-cornell-blocks.png)
+
+
+### 实例平移
+
+```rust
+pub struct Translate {
+    object: Rc<dyn Hittable>,
+    offset: Vec3,
+}
+
+impl Hittable for Translate {
+    fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
+        // 将光线向后移动偏移量
+        let offset_r = Ray::new_with_time(r.origin() - self.offset, r.direction(), r.time());
+
+        // 确定在偏移光线上是否存在交点（如果有，确定在哪里）
+        if !self.object.hit(&offset_r, ray_t, rec) {
+            return false;
+        }
+
+        // 将交点向前移动偏移量
+        rec.p += self.offset;
+
+        true
+    }
+}
+```
+Listing 66: [hittable.rs] 可击中的平移击中函数
+
+```rust
++impl Translate {
++   pub fn new(object: Rc<dyn Hittable>, offset: Vec3) -> Self {
++       let bbox = object.bounding_box() + offset;
++       Self {
++           object,
++           offset,
++           bbox,
++       }
++   }
++}
+
+impl Hittable for Translate {
+    ...
+
++   fn bounding_box(&self) -> &Aabb {
++      &self.bbox
++   }
+}
+```
+Listing 67: [hittable.rs] 可击中的平移类
+
+```rust
+impl std::ops::Add<Vec3> for &Aabb {
+    type Output = Aabb;
+
+    fn add(self, rhs: Vec3) -> Self::Output {
+        Aabb {
+            x: &self.x + rhs.x(),
+            y: &self.y + rhs.y(),
+            z: &self.z + rhs.z(),
+        }
+    }
+}
+
+impl std::ops::Add<&Aabb> for Vec3 {
+    type Output = Aabb;
+
+    fn add(self, rhs: &Aabb) -> Self::Output {
+        Aabb {
+            x: self.x() + &rhs.x,
+            y: self.y() + &rhs.y,
+            z: self.z() + &rhs.z,
+        }
+    }
+}
+```
+Listing 68: [aabb.rs] aabb + offset运算符
+
+```rust
+impl std::ops::Add<f64> for &Interval {
+    type Output = Interval;
+
+    fn add(self, rhs: f64) -> Self::Output {
+        Interval {
+            min: self.min + rhs,
+            max: self.max + rhs,
+        }
+    }
+}
+
+impl std::ops::Add<&Interval> for f64 {
+    type Output = Interval;
+
+    fn add(self, rhs: &Interval) -> Self::Output {
+        Interval {
+            min: self + rhs.min,
+            max: self + rhs.max,
+        }
+    }
+}
+```
+Listing 69: [interval.rs] interval + displacement运算符
+
+
+### 实例旋转
+
+```rust
+pub struct RotateY {
+  object: Rc<dyn Hittable>,
+  sin_theta: f64,
+  cos_theta: f64,
+  bbox: Aabb,
+}
+
+impl Hittable for RotateY {
+    fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
+        // 将光线从世界空间变换到对象空间
+        let mut origin = r.origin();
+        let mut direction = r.direction();
+
+        origin[0] = self.cos_theta * r.origin()[0] - self.sin_theta * r.origin()[2];
+        origin[2] = self.sin_theta * r.origin()[0] + self.cos_theta * r.origin()[2];
+
+        direction[0] = self.cos_theta * r.direction()[0] - self.sin_theta * r.direction()[2];
+        direction[2] = self.sin_theta * r.direction()[0] + self.cos_theta * r.direction()[2];
+
+        let rotated_r = Ray::new_with_time(origin, direction, r.time());
+
+        // 在对象空间中确定是否存在交点（如果有，确定在哪里）
+        if !self.object.hit(&rotated_r, ray_t, rec) {
+            return false;
+        }
+
+        // 将交点从对象空间变换到世界空间
+        let mut p = rec.p;
+        p[0] = self.cos_theta * rec.p[0] + self.sin_theta * rec.p[2];
+        p[2] = -self.sin_theta * rec.p[0] + self.cos_theta * rec.p[2];
+
+        // 将法线从对象空间变换到世界空间
+        let mut normal = rec.normal;
+        normal[0] = self.cos_theta * rec.normal[0] + self.sin_theta * rec.normal[2];
+        normal[2] = -self.sin_theta * rec.normal[0] + self.cos_theta * rec.normal[2];
+
+        rec.p = p;
+        rec.normal = normal;
+
+        true
+    }
+}
+```
+Listing 70: [hittable.rs] 可击中的Y旋转击中函数
+
+```rust
+impl RotateY {
++   pub fn new(p: Rc<dyn Hittable>, angle: f64) -> Self {
++       let radians = angle.to_radians();
++       let sin_theta = radians.sin();
++       let cos_theta = radians.cos();
++       let bbox = p.bounding_box();
++
++       let mut min = Point3::new(rtweekend::INFINITY, rtweekend::INFINITY, rtweekend::INFINITY);
++       let mut max = Point3::new(-rtweekend::INFINITY, -rtweekend::INFINITY, -rtweekend::INFINITY);
++
++       (0..2).for_each(|i| {
++           (0..2).for_each(|j| {
++               (0..2).for_each(|k| {
++                   let x = i as f64 * bbox.x.max + (1 - i) as f64 * bbox.x.min;
++                   let y = j as f64 * bbox.y.max + (1 - j) as f64 * bbox.y.min;
++                   let z = k as f64 * bbox.z.max + (1 - k) as f64 * bbox.z.min;
++
++                   let newx = cos_theta * x + sin_theta * z;
++                   let newz = -sin_theta * x + cos_theta * z;
++
++                   let tester = Vec3::new(newx, y, newz);
++
++                   (0..3).for_each(|c| {
++                       min[c] = min[c].min(tester[c]);
++                       max[c] = max[c].max(tester[c]);
++                   })
++               })
++           })
++       });
++
++       let bbox = Aabb::new_with_point(&min, &max);
++       Self {
++           object: p,
++           sin_theta,
++           cos_theta,
++           bbox,
++       }
++   }
+}
+
+impl Hittable for RotateY {
+    fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
+        ...
+    }
+
++   fn bounding_box(&self) -> &Aabb {
++       &self.bbox
++   }
+}
+```
+Listing 71: [hittable.rs] Hittable rotate-Y class
+
+```rust
+fn cornell_box() {
+    ...
++   let box1 = make_box(
++       Point3::new(0.0, 0.0, 0.0),
++       Vec3::new(165.0, 330.0, 165.0),
++       Rc::clone(&white)
++   );
++   let box1 = Rc::new(RotateY::new(box1, 15.0));
++   let box1 = Rc::new(Translate::new(box1, vec3::Vec3::new(265.0, 0.0, 295.0)));
++   world.add(box1);
++
++   let box2 = make_box(
++       Point3::new(0.0, 0.0, 0.0),
++       Vec3::new(165.0, 165.0, 165.0),
++       Rc::clone(&white)
++   );
+=   let box2 = Rc::new(RotateY::new(box2, -18.0));
++   let box2 = Rc::new(Translate::new(box2, vec3::Vec3::new(130.0, 0.0, 65.0)));
++   world.add(box2);
+    ...
+}
+```
+Listing 72: [main.rs] 带有Y轴旋转盒子的康奈尔场景
+
+![图 21: 标准的康奈尔盒场景](../../images/img-2.21-cornell-standard.png)
+
+
+
+## 体积
+
+### 恒定密度介质
+
+```rust
+use std::rc::Rc;
+
+use super::rtweekend;
+use super::hittable::{
+    Hittable,
+    HitRecord,
+};
+use super::material::{
+  Material,
+  Isotropic,
+};
+use super::ray::Ray;
+use super::vec3::Vec3;
+use super::color::Color;
+use super::aabb::Aabb;
+use super::texture::Texture;
+use super::interval::{
+  self,
+  Interval,
+};
+
+pub struct ConstantMedium {
+    boundary: Rc<dyn Hittable>,
+    neg_inv_density: f64,
+    phase_function: Rc<dyn Material>,
+}
+
+impl ConstantMedium {
+    pub fn new(b: Rc<dyn Hittable>, d: f64, a: Rc<dyn Texture>) -> Self {
+        Self {
+            boundary: b,
+            neg_inv_density: -1.0 / d,
+            phase_function: Rc::new(Isotropic::new(a)),
+        }
+    }
+    pub fn new_with_color(b: Rc<dyn Hittable>, d: f64, c: Color) -> Self {
+        Self {
+            boundary: b,
+            neg_inv_density: -1.0 / d,
+            phase_function: Rc::new(Isotropic::new_with_color(c)),
+        }
+    }
+}
+
+impl Hittable for ConstantMedium {
+    fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
+        // Print occasional samples when debugging. To enable, set enableDebug true.
+        const ENABLE_DEBUG: bool = false;
+        let debugging = ENABLE_DEBUG && rtweekend::random_double() < 0.00001;
+
+        let mut rec1 = HitRecord::default();
+        let mut rec2 = HitRecord::default();
+
+        if !self.boundary.hit(r, &interval::UNIVERSE, &mut rec1) {
+            return false;
+        }
+
+        if !self.boundary.hit(r, &Interval::new(rec1.t + 0.0001, rtweekend::INFINITY), &mut rec2) {
+            return false;
+        }
+
+        if debugging {
+            eprintln!("\nray_tmin={} ray_tmax={}", rec1.t, rec2.t);
+        }
+
+        if rec1.t < ray_t.min {
+            rec1.t = ray_t.min;
+        }
+        if rec2.t > ray_t.max {
+            rec2.t = ray_t.max;
+        }
+
+        if rec1.t >= rec2.t {
+            return false;
+        }
+
+        if rec1.t < 0.0 {
+            rec1.t = 0.0;
+        }
+
+        let ray_length = r.direction().length();
+        let distance_inside_boundary = (rec2.t - rec1.t) * ray_length;
+        let hit_distance = self.neg_inv_density * rtweekend::random_double().ln();
+
+        if hit_distance > distance_inside_boundary {
+            return false;
+        }
+
+        rec.t = rec1.t + hit_distance / ray_length;
+        rec.p = r.at(rec.t);
+
+        if debugging {
+            eprintln!("hit_distance = {}", hit_distance);
+            eprintln!("rec.t = {}", rec.t);
+            eprintln!("rec.p = {}", rec.p);
+        }
+
+        rec.normal = Vec3::new(1.0, 0.0, 0.0); // arbitrary
+        rec.front_face = true; // also arbitrary
+        rec.mat = Some(Rc::clone(&self.phase_function));
+
+        true
+    }
+
+    fn bounding_box(&self) -> &Aabb {
+        self.boundary.bounding_box()
+    }
+}
+```
+Listing 73: [constant_medium.rs] 恒定介质类
+
+```rust
+pub struct Isotropic {
+    pub albedo: Rc<dyn Texture>,
+}
+
+impl Isotropic {
+    pub fn new(a: Rc<dyn Texture>) -> Self {
+        Self {
+            albedo: a,
+        }
+    }
+
+    pub fn new_with_color(c: Color) -> Self {
+        Self {
+            albedo: Rc::new(SolidColor::new(c)),
+        }
+    }
+}
+
+impl Material for Isotropic {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+        *scattered = Ray::new_with_time(rec.p, vec3::random_unit_vector(), r_in.time());
+        *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+        true
+    }
+}
+```
+Listing 74: [material.rs] 各向同性类
+
+```rust
+fn cornell_smoke() {
+    let mut world = HittableList::default();
+
+    let red: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.65, 0.05, 0.05)));
+    let white: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.73, 0.73, 0.73)));
+    let green: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.12, 0.45, 0.15)));
+    let light: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(7.0, 7.0, 7.0)));
+
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 555.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            green
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 555.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            red
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(113.0, 554.0, 127.0),
+            vec3::Vec3::new(330.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 305.0),
+            light
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 555.0, 0.0),
+            vec3::Vec3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            Rc::clone(&white)
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 0.0, 0.0),
+            vec3::Vec3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            Rc::clone(&white)
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 0.0, 555.0),
+            vec3::Vec3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            Rc::clone(&white)
+        )
+    ));
+
+    let box1 = make_box(
+        Point3::new(0.0, 0.0, 0.0),
+        Vec3::new(165.0, 330.0, 165.0),
+        Rc::clone(&white)
+    );
+    let box1 = Rc::new(RotateY::new(box1, 15.0));
+    let box1 = Rc::new(Translate::new(box1, vec3::Vec3::new(265.0, 0.0, 295.0)));
+
+    let box2 = make_box(
+        Point3::new(0.0, 0.0, 0.0),
+        Vec3::new(165.0, 165.0, 165.0),
+        Rc::clone(&white)
+    );
+    let box2 = Rc::new(RotateY::new(box2, -18.0));
+    let box2 = Rc::new(Translate::new(box2, vec3::Vec3::new(130.0, 0.0, 65.0)));
+
+    world.add(Rc::new(
+        ConstantMedium::new_with_color(box1, 0.01, Color::new(0.0, 0.0, 0.0))
+    ));
+    world.add(Rc::new(
+        ConstantMedium::new_with_color(box2, 0.01, Color::new(1.0, 1.0, 1.0))
+    ));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_depth = 10;
+    cam.background = Color::default();
+
+    cam.vfov = 40.0;
+    cam.lookfrom = Point3::new(278.0, 278.0, -800.0);
+    cam.lookat = Point3::new(278.0, 278.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+    match 8 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        3 => earth(),
+        4 => two_perlin_spheres(),
+        5 => quads(),
+        6 => simple_light(),
+        7 => cornell_box(),
+        8 => cornell_smoke(),
+        _ => (),
+    }
+}
+```
+Listing 75: [main.cc] 带有烟雾的康奈尔盒
+
+![图 22: 带有烟雾块的康奈尔盒](../../images/img-2.22-cornell-smoke.png)
+
+
+
+## 一个测试所有新特性的场
+
+```rust
+```

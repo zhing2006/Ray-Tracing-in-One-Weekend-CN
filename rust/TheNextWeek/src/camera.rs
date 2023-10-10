@@ -7,9 +7,9 @@ use super::vec3::{self, Point3, Vec3};
 
 pub struct Camera {
   pub aspect_ratio: f64,  // Ratio of image width over height
-  pub image_width: i32,   // Rendered image width in pixel count
+  pub image_width: usize, // Rendered image width in pixel count
   pub samples_per_pixel: usize, // Count of random samples for each pixel
-  pub max_depth: i32,     // Maximum number of ray bounces into scene
+  pub max_depth: usize,   // Maximum number of ray bounces into scene
   pub background: Color,  // Background color for rays that miss
   pub vfov: f64,          // Vertical field of view in degrees
   pub lookfrom: Point3,   // Camera origin
@@ -17,7 +17,7 @@ pub struct Camera {
   pub vup: Vec3,          // Camera up vector
   pub defocus_angle: f64, // Defocus blur angle
   pub focus_dist: f64,    // Focus distance
-  image_height: i32,      // Rendered image height
+  image_height: usize,    // Rendered image height
   center: Point3,         // Camera center
   pixel00_loc: Point3,    // Location of pixel 0, 0
   pixel_delta_u: Vec3,    // Offset to pixel to the right
@@ -69,7 +69,7 @@ impl Camera {
       for i in 0..self.image_width {
         let mut pixel_color = Color::default();
         for _ in 0..self.samples_per_pixel {
-          let r = self.get_ray(i, j);
+          let r = self.get_ray(i as i32, j as i32);
           pixel_color += self.ray_color(&r, self.max_depth, world);
         }
         pixel_color.write_color(&mut stdout.lock(), self.samples_per_pixel).unwrap();
@@ -80,7 +80,7 @@ impl Camera {
   }
 
   fn initialize(&mut self) {
-    self.image_height = (self.image_width as f64 / self.aspect_ratio) as i32;
+    self.image_height = (self.image_width as f64 / self.aspect_ratio) as usize;
     self.image_height = if self.image_height < 1 { 1 } else { self.image_height };
 
     self.center = self.lookfrom;
@@ -146,11 +146,11 @@ impl Camera {
     self.center + p.x() * self.defocus_disk_u + p.y() * self.defocus_disk_v
   }
 
-  fn ray_color(&self, r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+  fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable) -> Color {
     let mut rec = HitRecord::default();
 
     // 如果我们超过了光线反弹限制，就不再收集光线。
-    if depth <= 0 {
+    if depth == 0 {
       return Color::default();
     }
 
