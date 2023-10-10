@@ -27,6 +27,7 @@ use material::{
   Lambertian,
   Metal,
   Dielectric,
+  DiffuseLight,
 };
 use bvh::BvhNode;
 use texture::{
@@ -109,6 +110,7 @@ fn random_spheres() {
   cam.image_width = 400;
   cam.samples_per_pixel = 50;
   cam.max_depth = 10;
+  cam.background = Color::new(0.7, 0.8, 1.0);
 
   cam.vfov = 20.0;
   cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
@@ -148,6 +150,7 @@ fn two_spheres() {
   cam.image_width = 400;
   cam.samples_per_pixel = 50;
   cam.max_depth = 10;
+  cam.background = Color::new(0.7, 0.8, 1.0);
 
   cam.vfov = 20.0;
   cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
@@ -176,6 +179,7 @@ fn earth() {
   cam.image_width = 400;
   cam.samples_per_pixel = 50;
   cam.max_depth = 10;
+  cam.background = Color::new(0.7, 0.8, 1.0);
 
   cam.vfov = 20.0;
   cam.lookfrom = Point3::new(0.0, 0.0, 12.0);
@@ -212,6 +216,7 @@ fn two_perlin_spheres() {
   cam.image_width = 400;
   cam.samples_per_pixel = 50;
   cam.max_depth = 10;
+  cam.background = Color::new(0.7, 0.8, 1.0);
 
   cam.vfov = 20.0;
   cam.lookfrom = Point3::new(13.0, 2.0, 3.0);
@@ -281,6 +286,7 @@ fn quads() {
   cam.image_width = 400;
   cam.samples_per_pixel = 50;
   cam.max_depth = 10;
+  cam.background = Color::new(0.7, 0.8, 1.0);
 
   cam.vfov = 80.0;
   cam.lookfrom = Point3::new(0.0, 0.0, 9.0);
@@ -292,15 +298,146 @@ fn quads() {
   cam.render(&world);
 }
 
+fn simple_light() {
+  let mut world = HittableList::default();
+
+  let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::new(4.0));
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, -1000.0, 0.0),
+      1000.0,
+      Rc::new(Lambertian::new_with_texture(Rc::clone(&pertext)))
+    )
+  ));
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, 2.0, 0.0),
+      2.0,
+      Rc::new(Lambertian::new_with_texture(pertext))
+    )
+  ));
+
+  let difflight: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(4.0, 4.0, 4.0)));
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(0.0, 7.0, 0.0),
+      2.0,
+      Rc::clone(&difflight)
+    )
+  ));
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(3.0, 1.0, -2.0),
+      vec3::Vec3::new(2.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 2.0, 0.0),
+      difflight
+    )
+  ));
+
+  let mut cam = Camera::default();
+
+  cam.aspect_ratio = 16.0 / 9.0;
+  cam.image_width = 400;
+  cam.samples_per_pixel = 50;
+  cam.max_depth = 10;
+  cam.background = Color::default();
+
+  cam.vfov = 20.0;
+  cam.lookfrom = Point3::new(26.0, 3.0, 6.0);
+  cam.lookat = Point3::new(0.0, 2.0, 0.0);
+  cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+  cam.defocus_angle = 0.0;
+
+  cam.render(&world);
+}
+
+fn cornell_box() {
+  let mut world = HittableList::default();
+
+  let red: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.65, 0.05, 0.05)));
+  let white: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.73, 0.73, 0.73)));
+  let green: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.12, 0.45, 0.15)));
+  let light: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(15.0, 15.0, 15.0)));
+
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(555.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 555.0, 0.0),
+      vec3::Vec3::new(0.0, 0.0, 555.0),
+      green
+    )
+  ));
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(0.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 555.0, 0.0),
+      vec3::Vec3::new(0.0, 0.0, 555.0),
+      red
+    )
+  ));
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(343.0, 554.0, 332.0),
+      vec3::Vec3::new(-130.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 0.0, -105.0),
+      light
+    )
+  ));
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(0.0, 0.0, 0.0),
+      vec3::Vec3::new(555.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 0.0, 555.0),
+      Rc::clone(&white)
+    )
+  ));
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(555.0, 555.0, 555.0),
+      vec3::Vec3::new(-555.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 0.0, -555.0),
+      Rc::clone(&white)
+    )
+  ));
+  world.add(Rc::new(
+    Quad::new(
+      Point3::new(0.0, 0.0, 555.0),
+      vec3::Vec3::new(555.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 555.0, 0.0),
+      white
+    )
+  ));
+
+  let mut cam = Camera::default();
+
+  cam.aspect_ratio = 1.0;
+  cam.image_width = 400;
+  cam.samples_per_pixel = 50;
+  cam.max_depth = 10;
+  cam.background = Color::default();
+
+  cam.vfov = 40.0;
+  cam.lookfrom = Point3::new(278.0, 278.0, -800.0);
+  cam.lookat = Point3::new(278.0, 278.0, 0.0);
+  cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+  cam.defocus_angle = 0.0;
+
+  cam.render(&world);
+}
+
 fn main() {
   let now = std::time::Instant::now();
 
-  match 5 {
+  match 7 {
     1 => random_spheres(),
     2 => two_spheres(),
     3 => earth(),
     4 => two_perlin_spheres(),
     5 => quads(),
+    6 => simple_light(),
+    7 => cornell_box(),
     _ => (),
   }
 

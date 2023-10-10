@@ -1962,4 +1962,360 @@ Listing 56: [main.rs] 包含四边形的新场景
 ### 发光材料
 
 ```rust
+pub struct DiffuseLight {
+    pub emit: Rc<dyn Texture>,
+}
+
+impl DiffuseLight {
+    pub fn new(a: Rc<dyn Texture>) -> Self {
+        Self {
+            emit: a,
+        }
+    }
+
+    pub fn new_with_color(c: Color) -> Self {
+        Self {
+            emit: Rc::new(SolidColor::new(c)),
+        }
+    }
+}
+
+impl Material for DiffuseLight {
+    fn scatter(&self, _r_in: &Ray, _rec: &HitRecord, _attenuation: &mut Color, _scattered: &mut Ray) -> bool {
+        false
+    }
+
+    fn emitted(&self, u: f64, v: f64, p: vec3::Point3) -> Color {
+        self.emit.value(u, v, p)
+    }
+}
 ```
+Listing 57: [material.rs] A diffuse light class
+
+```rust
+pub trait Material {
+    fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool;
++   fn emitted(&self, _u: f64, _v: f64, _p: vec3::Point3) -> Color {
++       Color::new(0.0, 0.0, 0.0)
++   }
+}
+```
+Listing 58: [material.rs] New emitted function in class material
+
+
+### 向光线颜色函数添加背景色
+
+```rust
+pub struct Camera {
+    pub aspect_ratio: f64,  // Ratio of image width over height
+    pub image_width: i32,   // Rendered image width in pixel count
+    pub samples_per_pixel: usize, // Count of random samples for each pixel
+    pub max_depth: i32,     // Maximum number of ray bounces into scene
++   pub background: Color,  // Background color for rays that miss
+    ...
+}
+
+impl Default for Camera {
+    fn default() -> Self {
+        Self {
+            aspect_ratio: 1.0,
+            image_width: 100,
+            samples_per_pixel: 10,
+            max_depth: 10,
++           background: Color::default(),
+            ...
+        }
+    }
+}
+
+impl Camera {
+    ...
+
+    fn ray_color(&self, r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+        let mut rec = HitRecord::default();
+
+        // 如果我们超过了光线反弹限制，就不再收集光线。
+        if depth <= 0 {
+            return Color::default();
+        }
+
++       // 如果光线没有击中了世界中的任何东西，则返回背景颜色。
++       if !world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
++           return self.background;
++       }
++
++       if let Some(mat) = rec.mat.clone() {
++           let mut scattered = Ray::default();
++           let mut attenuation = Color::default();
++           let color_from_emission = mat.emitted(rec.u, rec.v, rec.p);
++           if !mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
++               return color_from_emission;
++           }
++
++           let color_from_scatter = attenuation * self.ray_color(&scattered,  depth - 1, world);
++
++           color_from_emission + color_from_scatter
++       } else {
++           Color::default()
++       }
++   }
+}
+```
+Listing 59: [camera.rs] ray_color function with background and emitting materials
+
+```rust
+fn random_spheres() {
+    ...
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
++   cam.background = Color::new(0.7, 0.8, 1.0);
+    ...
+}
+
+fn two_spheres() {
+    ...
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
++   cam.background = Color::new(0.7, 0.8, 1.0);
+    ...
+}
+
+fn earth() {
+    ...
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
++   cam.background = Color::new(0.7, 0.8, 1.0);
+    ...
+}
+
+fn two_perlin_spheres() {
+    ...
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
++   cam.background = Color::new(0.7, 0.8, 1.0);
+    ...
+}
+
+fn quads() {
+    ...
+    // Camera
+    let mut cam = Camera::default();
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
++   cam.background = Color::new(0.7, 0.8, 1.0);
+    ...
+}
+```
+Listing 60: [main.rs] Specifying new background color
+
+
+### 将对象转化为光源
+
+```rust
+fn simple_light() {
+    let mut world = HittableList::default();
+
+    let pertext: Rc<dyn Texture> = Rc::new(NoiseTexture::new(4.0));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, -1000.0, 0.0),
+            1000.0,
+            Rc::new(Lambertian::new_with_texture(Rc::clone(&pertext)))
+        )
+    ));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, 2.0, 0.0),
+            2.0,
+            Rc::new(Lambertian::new_with_texture(pertext))
+        )
+    ));
+
+    let difflight = Rc::new(DiffuseLight::new_with_color(Color::new(4.0, 4.0, 4.0)));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(3.0, 1.0, -2.0),
+            vec3::Vec3::new(2.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 2.0, 0.0),
+            difflight
+        )
+    ));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
+    cam.background = Color::default();
+
+    cam.vfov = 20.0;
+    cam.lookfrom = Point3::new(26.0, 3.0, 6.0);
+    cam.lookat = Point3::new(0.0, 2.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+    match 6 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        3 => earth(),
+        4 => two_perlin_spheres(),
+        5 => quads(),
+        6 => simple_light(),
+        _ => (),
+    }
+}
+```
+Listing 61: [main.rs] 一个简单的矩形光源
+
+![Image 17: 场景中的矩形光源](../../images/img-2.17-rect-light.png)
+
+```rust
+fn simple_light() {
+    ...
++   let difflight: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(4.0, 4.0, 4.0)));
++   world.add(Rc::new(
++       Sphere::new(
++           Point3::new(0.0, 7.0, 0.0),
++           2.0,
++           Rc::clone(&difflight)
++       )
++   ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(3.0, 1.0, -2.0),
+            vec3::Vec3::new(2.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 2.0, 0.0),
+            difflight
+        )
+    ));
+    ...
+}
+```
+Listing 62: [main.rs] 一个简单的矩形光源加上发光的球体
+
+![Image 18: 场景中的矩形和球体光源](../../images/img-2.18-rect-sphere-light.png)
+
+
+### 创建一个空的“康奈尔盒”
+
+```rust
+fn cornell_box() {
+    let mut world = HittableList::default();
+
+    let red: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.65, 0.05, 0.05)));
+    let white: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.73, 0.73, 0.73)));
+    let green: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.12, 0.45, 0.15)));
+    let light: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(15.0, 15.0, 15.0)));
+
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 555.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            green
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 555.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            red
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(343.0, 554.0, 332.0),
+            vec3::Vec3::new(-130.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, -105.0),
+            light
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 0.0, 0.0),
+            vec3::Vec3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 555.0),
+            Rc::clone(&white)
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(555.0, 555.0, 555.0),
+            vec3::Vec3::new(-555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, -555.0),
+            Rc::clone(&white)
+        )
+    ));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(0.0, 0.0, 555.0),
+            vec3::Vec3::new(555.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 555.0, 0.0),
+            white
+        )
+    ));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
+    cam.background = Color::default();
+
+    cam.vfov = 40.0;
+    cam.lookfrom = Point3::new(278.0, 278.0, -800.0);
+    cam.lookat = Point3::new(278.0, 278.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+    match 7 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        3 => earth(),
+        4 => two_perlin_spheres(),
+        5 => quads(),
+        6 => simple_light(),
+        7 => cornell_box(),
+        _ => (),
+    }
+}
+```
+Listing 63: [main.cc] 康奈尔盒场景，空的
+
+![图 19: 空的康奈尔盒](../../images/img-2.19-cornell-empty.png)
+
+
+
+## 实例
+

@@ -11,6 +11,9 @@ use super::texture::{
 
 pub trait Material {
   fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool;
+  fn emitted(&self, _u: f64, _v: f64, _p: vec3::Point3) -> Color {
+    Color::new(0.0, 0.0, 0.0)
+  }
 }
 
 pub struct Lambertian {
@@ -106,5 +109,33 @@ impl Material for Dielectric {
 
     *scattered = Ray::new_with_time(rec.p, direction, r_in.time());
     true
+  }
+}
+
+pub struct DiffuseLight {
+  pub emit: Rc<dyn Texture>,
+}
+
+impl DiffuseLight {
+  pub fn new(a: Rc<dyn Texture>) -> Self {
+    Self {
+      emit: a,
+    }
+  }
+
+  pub fn new_with_color(c: Color) -> Self {
+    Self {
+      emit: Rc::new(SolidColor::new(c)),
+    }
+  }
+}
+
+impl Material for DiffuseLight {
+  fn scatter(&self, _r_in: &Ray, _rec: &HitRecord, _attenuation: &mut Color, _scattered: &mut Ray) -> bool {
+    false
+  }
+
+  fn emitted(&self, u: f64, v: f64, p: vec3::Point3) -> Color {
+    self.emit.value(u, v, p)
   }
 }

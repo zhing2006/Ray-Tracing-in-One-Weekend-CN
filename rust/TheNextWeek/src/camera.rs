@@ -10,6 +10,7 @@ pub struct Camera {
   pub image_width: i32,   // Rendered image width in pixel count
   pub samples_per_pixel: usize, // Count of random samples for each pixel
   pub max_depth: i32,     // Maximum number of ray bounces into scene
+  pub background: Color,  // Background color for rays that miss
   pub vfov: f64,          // Vertical field of view in degrees
   pub lookfrom: Point3,   // Camera origin
   pub lookat: Point3,     // Point camera is looking at
@@ -35,6 +36,7 @@ impl Default for Camera {
       image_width: 100,
       samples_per_pixel: 10,
       max_depth: 10,
+      background: Color::default(),
       vfov: 90.0,
       lookfrom: Point3::new(0.0, 0.0, -1.0),
       lookat: Point3::new(0.0, 0.0, 0.0),
@@ -68,7 +70,7 @@ impl Camera {
         let mut pixel_color = Color::default();
         for _ in 0..self.samples_per_pixel {
           let r = self.get_ray(i, j);
-          pixel_color += Self::ray_color(&r, self.max_depth, world);
+          pixel_color += self.ray_color(&r, self.max_depth, world);
         }
         pixel_color.write_color(&mut stdout.lock(), self.samples_per_pixel).unwrap();
       }
@@ -144,7 +146,7 @@ impl Camera {
     self.center + p.x() * self.defocus_disk_u + p.y() * self.defocus_disk_v
   }
 
-  fn ray_color(r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
+  fn ray_color(&self, r: &Ray, depth: i32, world: &dyn Hittable) -> Color {
     let mut rec = HitRecord::default();
 
     // 如果我们超过了光线反弹限制，就不再收集光线。
@@ -152,19 +154,24 @@ impl Camera {
       return Color::default();
     }
 
-    if world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
-      let mut scattered = Ray::default();
-      let mut attenuation = Color::default();
-      if let Some(mat) = rec.mat.clone() {
-        if mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
-          return attenuation * Self::ray_color(&scattered, depth - 1, world);
-        }
-      }
-      return Color::default();
+    // 如果光线没有击中了世界中的任何东西，则返回背景颜色。
+    if !world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+      return self.background;
     }
 
-    let unit_direction = vec3::unit_vector(r.direction());
-    let a = 0.5 * (unit_direction.y() + 1.0);
-    (1.0 - a) * Color::new(1.0, 1.0, 1.0) + a * Color::new(0.5, 0.7, 1.0)
+    if let Some(mat) = rec.mat.clone() {
+      let mut scattered = Ray::default();
+      let mut attenuation = Color::default();
+      let color_from_emission = mat.emitted(rec.u, rec.v, rec.p);
+      if !mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
+        return color_from_emission;
+      }
+
+      let color_from_scatter = attenuation * self.ray_color(&scattered,  depth - 1, world);
+
+      color_from_emission + color_from_scatter
+    } else {
+      Color::default()
+    }
   }
 }
