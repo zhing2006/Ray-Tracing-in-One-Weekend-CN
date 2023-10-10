@@ -40,6 +40,31 @@ impl Aabb {
     }
   }
 
+  pub fn pad(&self) -> Self {
+    // 返回一个没有边小于某个 delta 的 AABB，如果需要则填充。
+    let delta = 0.0001;
+    let new_x = if self.x.size() < delta {
+      self.x.expand(delta)
+    } else {
+      self.x.clone()
+    };
+    let new_y = if self.y.size() < delta {
+      self.y.expand(delta)
+    } else {
+      self.y.clone()
+    };
+    let new_z = if self.z.size() < delta {
+      self.z.expand(delta)
+    } else {
+      self.z.clone()
+    };
+    Self {
+      x: new_x,
+      y: new_y,
+      z: new_z,
+    }
+  }
+
   pub fn axis(&self, n: usize) -> &Interval {
     match n {
       0 => &self.x,

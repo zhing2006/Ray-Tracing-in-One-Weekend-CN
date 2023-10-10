@@ -256,7 +256,7 @@ impl Interval {
         self.max - self.min
     }
 
-+   pub fn expand(&mut self, delta: f64) -> Interval {
++   pub fn expand(&self, delta: f64) -> Interval {
 +       let padding = delta / 2.0;
 +       Interval::new(self.min - padding, self.max + padding)
 +   }
@@ -1618,5 +1618,348 @@ impl Texture for NoiseTexture {
     }
 }
 ```
+Listing 49: [texture.rs] 具有大理石纹理的噪声纹理
 
 ![图像 15：Perlin 噪声，大理石纹理](../../images/img-2.15-perlin-marble.png)
+
+
+
+## 四边形
+
+### 定义四边形
+
+```rust
+impl Aabb {
+    ...
+    pub fn pad(&self) -> Self {
+        // 返回一个没有边小于某个 delta 的 AABB，如果需要则填充。
+        let delta = 0.0001;
+        let new_x = if self.x.size() < delta {
+            x.expand(delta)
+        } else {
+            self.x.clone()
+        };
+        let new_y = if self.y.size() < delta {
+            y.expand(delta)
+        } else {
+            self.y.clone()
+        };
+        let new_z = if self.z.size() < delta {
+            z.expand(delta)
+        } else {
+            self.z.clone()
+        };
+        Self {
+            x: new_x,
+            y: new_y,
+            z: new_z,
+        }
+    }
+    ...
+}
+```
+Listing 50: [aabb.rs] 新的 aabb::pad() 方法
+
+```rust
+use std::rc::Rc;
+
+use super::vec3::{
+    Vec3,
+    Point3,
+};
+use super::material::Material;
+use super::aabb::Aabb;
+use super::hittable::{
+    HitRecord,
+    Hittable,
+};
+
+pub struct Quad {
+    q: Point3,
+    u: Vec3,
+    v: Vec3,
+    mat: Rc<dyn Material>,
+    bbox: Aabb,
+}
+
+impl Quad {
+  pub fn new(q: Point3, u: Vec3, v: Vec3, mat: Rc<dyn Material>) -> Self {
+        Self {
+            q,
+            u,
+            v,
+            mat,
+            bbox: Aabb::new_with_point(
+                &q, &(q + u + v)
+            ),
+        }
+    }
+}
+
+impl Hittable for Quad {
+    fn hit(&self, r: &crate::ray::Ray, ray_t: &crate::interval::Interval, hit_record: &mut HitRecord) -> bool {
+        // TODO
+        false
+    }
+
+    fn bounding_box(&self) -> &Aabb {
+        &self.bbox
+    }
+}
+```
+Listing 51: [quad.rs] 二维四边形（平行四边形）类
+
+考虑到Rust的习惯，这里并没有实现C++版本的set_bounding_box，而是直接在new里计算了bbox。
+
+
+### 寻找包含给定四边形的平面
+
+```rust
+pub struct Quad {
+    q: Point3,
+    u: Vec3,
+    v: Vec3,
++   normal: Vec3,
++   d: f64,
+    mat: Rc<dyn Material>,
+    bbox: Aabb,
+}
+
+impl Quad {
+  pub fn new(q: Point3, u: Vec3, v: Vec3, mat: Rc<dyn Material>) -> Self {
++       let n = vec3::cross(u, v);
++       let normal = vec3::unit_vector(n);
+        Self {
+            q,
+            u,
+            v,
++           normal,
++           d: vec3::dot(normal, q),
+            mat,
+            bbox: Aabb::new_with_point(
+                &q, &(q + u + v)
+            ),
+        }
+    }
+}
+```
+Listing 52: [quad.rs] 缓存平面值
+
+```rust
+impl Hittable for Quad {
+    fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
++       let denom = vec3::dot(self.normal, r.direction());
+
++       // 如果射线与平面平行，则没有相交。
++       if denom.abs() < 1e-8 {
++           return false;
++       }
+
++       // 如果相交点参数 t 在射线区间之外，则返回 false。
++       let t = (self.d - vec3::dot(self.normal, r.origin())) / denom;
++       if !ray_t.contains(t) {
++           return false;
++       }
+
++       let intersection = r.at(t);
+
++       rec.t = t;
++       rec.p = intersection;
++       rec.mat = Some(Rc::clone(&self.mat));
++       rec.set_face_normal(r, self.normal);
+
++       true
+    }
+    ...
+}
+```
+Listing 53: [quad.rs] 用于无限平面的 hit() 方法
+
+
+### 平面上的点的定位
+
+```rust
+pub struct Quad {
+    q: Point3,
+    u: Vec3,
+    v: Vec3,
++   w: Vec3,
+    normal: Vec3,
+    d: f64,
+    mat: Rc<dyn Material>,
+    bbox: Aabb,
+}
+
+impl Quad {
+  pub fn new(q: Point3, u: Vec3, v: Vec3, mat: Rc<dyn Material>) -> Self {
+        let n = vec3::cross(u, v);
+        let normal = vec3::unit_vector(n);
+        Self {
+            q,
+            u,
+            v,
++           w: n / vec3::dot(n, n),
+            normal,
+            d: vec3::dot(normal, q),
+            mat,
+            bbox: Aabb::new_with_point(
+                &q, &(q + u + v)
+            ),
+        }
+    }
+}
+```
+Listing 54: [quad.rs] 缓存四边形的 w 值
+
+
+### 内部测试使用UV坐标的交点
+
+```rust
+impl Quad {
+    ...
+
++   pub fn is_interior(&self, a: f64, b: f64, rec: &mut HitRecord) -> bool {
++       // 给定平面坐标中的击中点，如果它在基元之外，则返回false，否则设置击中记录的UV坐标并返回true。
++       if !(0.0..=1.0).contains(&a) || !(0.0..=1.0).contains(&b) {
++           return false;
++       }
++
++       rec.u = a;
++       rec.v = b;
++
++       true
++   }
+}
+
+impl Hittable for Quad {
+    fn hit(&self, r: &Ray, ray_t: &Interval, rec: &mut HitRecord) -> bool {
+        let denom = vec3::dot(self.normal, r.direction());
+
+        // 如果射线与平面平行，则没有相交。
+        if denom.abs() < 1e-8 {
+            return false;
+        }
+
+        // 如果相交点参数 t 在射线区间之外，则返回 false。
+        let t = (self.d - vec3::dot(self.normal, r.origin())) / denom;
+        if !ray_t.contains(t) {
+            return false;
+        }
+
++       // 使用平面坐标确定击中点是否在平面形状内部。
++       let intersection = r.at(t);
++       let planar_hitpt_vector = intersection - self.q;
++       let alpha = vec3::dot(self.w, vec3::cross(planar_hitpt_vector, self.v));
++       let beta = vec3::dot(self.w, vec3::cross(self.u, planar_hitpt_vector));
++
++       if !self.is_interior(alpha, beta, rec) {
++           return false;
++       }
++
++       // 光线击中了2D形状；设置剩余的击中记录并返回true。
+        rec.t = t;
+        rec.p = intersection;
+        rec.mat = Some(Rc::clone(&self.mat));
+        rec.set_face_normal(r, self.normal);
+
+        true
+    }
+
+      ...
+}
+```
+Listing 55: [quad.rs] 最终的quad类
+
+```rust
+fn quads() {
+    let mut world = HittableList::default();
+
+    // Material
+    let left_red: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(1.0, 0.2, 0.2)));
+    let back_green: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.2, 1.0, 0.2)));
+    let right_blue: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.2, 0.2, 1.0)));
+    let upper_orange: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(1.0, 0.5, 0.0)));
+    let lower_teal: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.2, 0.8, 0.8)));
+
+    // Quad
+    world.add(
+        Rc::new(Quad::new(
+            Point3::new(-3.0, -2.0, 5.0),
+            vec3::Vec3::new(0.0, 0.0, -4.0),
+            vec3::Vec3::new(0.0, 4.0, 0.0),
+            left_red
+        ))
+    );
+    world.add(
+        Rc::new(Quad::new(
+            Point3::new(-2.0, -2.0, 0.0),
+            vec3::Vec3::new(4.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 4.0, 0.0),
+            back_green
+        ))
+    );
+    world.add(
+        Rc::new(Quad::new(
+            Point3::new(3.0, -2.0, 1.0),
+            vec3::Vec3::new(0.0, 0.0, 4.0),
+            vec3::Vec3::new(0.0, 4.0, 0.0),
+            right_blue
+        ))
+    );
+    world.add(
+        Rc::new(Quad::new(
+            Point3::new(-2.0, 3.0, 1.0),
+            vec3::Vec3::new(4.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 4.0),
+            upper_orange
+        ))
+    );
+    world.add(
+        Rc::new(Quad::new(
+            Point3::new(-2.0, -3.0, 5.0),
+            vec3::Vec3::new(4.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, -4.0),
+            lower_teal
+        ))
+    );
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 50;
+    cam.max_depth = 10;
+
+    cam.vfov = 80.0;
+    cam.lookfrom = Point3::new(0.0, 0.0, 9.0);
+    cam.lookat = Point3::new(0.0, 0.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+  match 5 {
+    1 => random_spheres(),
+    2 => two_spheres(),
+    3 => earth(),
+    4 => two_perlin_spheres(),
+    5 => quads(),
+    _ => (),
+  }
+}
+```
+Listing 56: [main.rs] 包含四边形的新场景
+
+![图 16：四边形](../../images/img-2.16-quads.png)
+
+
+
+## 光源
+
+### 发光材料
+
+```rust
+```
