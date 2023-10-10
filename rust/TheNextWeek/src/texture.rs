@@ -3,7 +3,6 @@ use std::rc::Rc;
 use super::vec3::Point3;
 use super::color::Color;
 use super::rtw_stb_image::RtwImage;
-use super::interval::Interval;
 use super::perlin::Perlin;
 
 pub trait Texture {
@@ -94,8 +93,8 @@ impl Texture for ImageTexture {
     }
 
     // 将输入的纹理坐标限制在 [0,1] x [1,0] 范围内
-    let u = Interval::new(0.0, 1.0).clamp(u);
-    let v = 1.0 - Interval::new(0.0, 1.0).clamp(v);
+    let u = u.clamp(0.0, 1.0);
+    let v = 1.0 - v.clamp(0.0, 1.0);
 
     let i = (u * self.image.width() as f64) as usize;
     let j = (v * self.image.height() as f64) as usize;

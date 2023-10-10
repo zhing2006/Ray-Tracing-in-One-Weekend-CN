@@ -55,7 +55,7 @@ impl Sphere {
     self.center1 + self.center_vec * time
   }
 
-  fn get_sphere_uv(p: Point3, u: &mut f64, v: &mut f64) {
+  fn get_sphere_uv(p: Point3) -> (f64, f64) {
     // p: a given point on the sphere of radius one, centered at the origin.
     // u: returned value [0,1] of angle around the Y axis from X=-1.
     // v: returned value [0,1] of angle from Y=-1 to Y=+1.
@@ -66,8 +66,7 @@ impl Sphere {
     let theta = (-p.y()).acos();
     let phi = (-p.z()).atan2(p.x()) + rtweekend::PI;
 
-    *u = phi / (2.0 * rtweekend::PI);
-    *v = theta / rtweekend::PI;
+    (phi / (2.0 * rtweekend::PI), theta / rtweekend::PI)
   }
 }
 
@@ -98,7 +97,7 @@ impl Hittable for Sphere {
     hit_record.p = r.at(hit_record.t);
     let outward_normal = (hit_record.p - self.center1) / self.radius;
     hit_record.set_face_normal(r, outward_normal);
-    Self::get_sphere_uv(outward_normal, &mut hit_record.u, &mut hit_record.v);
+    (hit_record.u, hit_record.v) = Self::get_sphere_uv(outward_normal);
     hit_record.mat = Some(Rc::clone(&self.mat));
 
     true

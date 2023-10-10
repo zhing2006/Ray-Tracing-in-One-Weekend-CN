@@ -55,6 +55,8 @@ impl Ray {
 ```
 Listing 1: [ray.rs] 带有时间信息的光线
 
+由于Rust不允许函数重名，因此不同的构造函数之后都以new_with_xxx方式命名。
+
 
 ### 更新相机以模拟运动模糊
 
@@ -385,6 +387,8 @@ pub trait Hittable {
 ```
 Listing 10: [hittable.rs] 具有包围盒的可击中物体类
 
+原文中bounding_box返回值，但因为我没有为Aabb实现Copy Trait，因此这里改为返回引用。
+
 ```rust
 pub struct Sphere {
     center1: Point3,
@@ -624,6 +628,8 @@ impl BvhNode {
 ```
 Listing 17: [bvh.rs] 包围体层次结构节点
 
+这里与原C++代码略作修改直接在if进行中返回Self，更符合Rust的使用习惯。
+
 ```rust
 pub fn random_int(min: i32, max: i32) -> i32 {
     // Returns a random integer in [min,max].
@@ -657,6 +663,8 @@ impl BvhNode {
 ```
 Listing 19: [bvh.rs] BVH 比较函数，X 轴
 
+由于Rust的比较函数和C++不同，是返回Ordering类型，这里相关比较排序代码修改较多。
+
 ```rust
 fn main() {
     ...
@@ -686,6 +694,8 @@ impl BvhNode {
     ...
 ```
 Listing 21: [bvh.rs] 构建 BVH 对象范围的边界框
+
+这里循环是使用C++的for方式，还是Rust更习惯的iter方式，见仁见智。本文使用iter方式。
 
 ```rust
     pub fn new_with_hitables(src_objects: &mut Vec<Rc<dyn Hittable>>, start: usize, end: usize) -> Self {
@@ -995,7 +1005,7 @@ Listing 30: [main.rs] 两个带纹理的球体
 impl Sphere {
     ...
 
-+    fn get_sphere_uv(p: Point3, u: &mut f64, v: &mut f64) {
++    fn get_sphere_uv(p: Point3x) -> (f64, f64) {
 +       // p: a given point on the sphere of radius one, centered at the origin.
 +       // u: returned value [0,1] of angle around the Y axis from X=-1.
 +       // v: returned value [0,1] of angle from Y=-1 to Y=+1.
@@ -1006,12 +1016,13 @@ impl Sphere {
 +       let theta = (-p.y()).acos();
 +       let phi = (-p.z()).atan2(p.x()) + rtweekend::PI;
 +
-+       *u = phi / (2.0 * rtweekend::PI);
-+       *v = theta / rtweekend::PI;
++       (phi / (2.0 * rtweekend::PI), theta / rtweekend::PI)
 +   }
 }
 ```
 Listing 31: [sphere.rs] get_sphere_uv 函数
+
+这里u, v的返回通过-> (f64, f64)实现更符合Rust习惯。
 
 ```rust
 impl Hittable for Sphere {
@@ -1020,7 +1031,7 @@ impl Hittable for Sphere {
         hit_record.p = r.at(hit_record.t);
         let outward_normal = (hit_record.p - self.center1) / self.radius;
         hit_record.set_face_normal(r, outward_normal);
-+       Self::get_sphere_uv(outward_normal, &mut hit_record.u, &mut hit_record.v);
++       (hit_record.u, hit_record.v) = Self::get_sphere_uv(outward_normal);
         hit_record.mat = Some(Rc::clone(&self.mat));
 
         true
@@ -1157,6 +1168,9 @@ impl RtwImage {
 ```
 Listing 33: [rtw_stb_image.rs] rtw_image 辅助类
 
+注意此处Rust的stb_image库的使用和C的版本区别较大（做了封装），因此代码与原文相比修改较大。
+另原文此处代码也不是很优雅，本文Rust也仅仅是实现功能，也未作“美化”。
+
 ```rust
 pub struct ImageTexture {
     image: RtwImage,
@@ -1178,8 +1192,8 @@ impl Texture for ImageTexture {
         }
 
         // 将输入的纹理坐标限制在 [0,1] x [1,0] 范围内
-        let u = Interval::new(0.0, 1.0).clamp(u);
-        let v = 1.0 - Interval::new(0.0, 1.0).clamp(v);
+        let u = u.clamp(0.0, 1.0);
+        let v = 1.0 - v.clamp(0.0, 1.0);
 
         let i = (u * self.image.width() as f64) as usize;
         let j = (v * self.image.height() as f64) as usize;
@@ -1195,6 +1209,8 @@ impl Texture for ImageTexture {
 }
 ```
 Listing 34: [texture.rs] 图像纹理类
+
+此处Rust的f64已有clamp函数，因此没有使用原文的interval中的clamp。
 
 
 ### 渲染图像纹理
