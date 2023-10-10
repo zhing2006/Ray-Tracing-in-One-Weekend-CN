@@ -2345,7 +2345,7 @@ pub fn make_box(a: Point3, b: Point3, mat: Rc<dyn Material>) -> Rc<HittableList>
         Quad::new(Point3::new(min.x(), min.y(), max.z()), dx, dy, Rc::clone(&mat))
     ));
     sides.add(Rc::new(
-        Quad::new(Point3::new(max.x(), max.y(), min.z()), -dz, dy, Rc::clone(&mat))
+        Quad::new(Point3::new(max.x(), min.y(), max.z()), -dz, dy, Rc::clone(&mat))
     ));
     sides.add(Rc::new(
         Quad::new(Point3::new(max.x(), min.y(), min.z()), -dx, dy, Rc::clone(&mat))
@@ -2885,4 +2885,154 @@ Listing 75: [main.cc] 带有烟雾的康奈尔盒
 ## 一个测试所有新特性的场
 
 ```rust
+fn final_scene(image_width: usize, samples_per_pixel: usize, max_depth: usize) {
+    let mut boxes1 = HittableList::default();
+    let ground: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.48, 0.83, 0.53)));
+
+    let boxes_per_side = 20;
+    (0..boxes_per_side).for_each(|i| {
+        (0..boxes_per_side).for_each(|j| {
+        let w = 100.0;
+        let x0 = -1000.0 + i as f64 * w;
+        let z0 = -1000.0 + j as f64 * w;
+        let y0 = 0.0;
+        let x1 = x0 + w;
+        let y1 = rtweekend::random_double_range(1.0, 101.0);
+        let z1 = z0 + w;
+
+        boxes1.add(
+            make_box(
+                Point3::new(x0, y0, z0),
+                Point3::new(x1, y1, z1),
+                Rc::clone(&ground)
+            )
+        );
+        });
+    });
+
+    let mut world = HittableList::default();
+
+    world.add(Rc::new(BvhNode::new(&mut boxes1)));
+
+    let light: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(7.0, 7.0, 7.0)));
+    world.add(Rc::new(
+        Quad::new(
+            Point3::new(123.0, 554.0, 147.0),
+            vec3::Vec3::new(412.0, 0.0, 0.0),
+            vec3::Vec3::new(0.0, 0.0, 412.0),
+            light
+        )
+    ));
+
+    let center1 = Point3::new(400.0, 400.0, 200.0);
+    let center2 = center1 + vec3::Vec3::new(30.0, 0.0, 0.0);
+    let sphere_material: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.7, 0.3, 0.1)));
+    world.add(Rc::new(
+        Sphere::new_with_center2(center1, center2, 50.0, sphere_material)
+    ));
+
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(260.0, 150.0, 45.0),
+            50.0,
+            Rc::new(Dielectric::new(1.5))
+        )
+    ));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(0.0, 150.0, 145.0),
+            50.0,
+            Rc::new(Metal::new(Color::new(0.8, 0.8, 0.9), 1.0))
+        )
+    ));
+
+    let boundary: Rc<dyn Hittable> = Rc::new(Sphere::new(Point3::new(360.0, 150.0, 145.0), 70.0, Rc::new(Dielectric::new(1.5))));
+    world.add(Rc::clone(&boundary));
+    world.add(Rc::new(ConstantMedium::new_with_color(
+        Rc::clone(&boundary),
+        0.2,
+        Color::new(0.2, 0.4, 0.9)
+    )));
+    let boundary: Rc<dyn Hittable> = Rc::new(Sphere::new(Point3::new(0.0, 0.0, 0.0), 5000.0, Rc::new(Dielectric::new(1.5))));
+    world.add(Rc::new(ConstantMedium::new_with_color(
+        Rc::clone(&boundary),
+        0.0001,
+        Color::new(1.0, 1.0, 1.0)
+    )));
+
+    let emat: Rc<dyn Material> = Rc::new(Lambertian::new_with_texture(Rc::new(ImageTexture::new("earthmap.jpg"))));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(400.0, 200.0, 400.0),
+            100.0,
+            emat
+        )
+    ));
+    let pertext = Rc::new(NoiseTexture::new(0.1));
+    world.add(Rc::new(
+        Sphere::new(
+            Point3::new(220.0, 280.0, 300.0),
+            80.0,
+            Rc::new(Lambertian::new_with_texture(pertext))
+        )
+    ));
+
+    let mut boxes2 = HittableList::default();
+    let white: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.73, 0.73, 0.73)));
+    let ns = 1000;
+    (0..ns).for_each(|_| {
+        boxes2.add(
+            Rc::new(Sphere::new(
+                Point3::random_range(0.0, 165.0),
+                10.0,
+                Rc::clone(&white)
+            ))
+        );
+    });
+
+    world.add(Rc::new(
+        Translate::new(
+            Rc::new(RotateY::new(
+                Rc::new(BvhNode::new(&mut boxes2)),
+                15.0
+            )),
+            vec3::Vec3::new(-100.0, 270.0, 395.0)
+        )
+    ));
+
+    let mut cam = Camera::default();
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = image_width;
+    cam.samples_per_pixel = samples_per_pixel;
+    cam.max_depth = max_depth;
+    cam.background = Color::default();
+
+    cam.vfov = 40.0;
+    cam.lookfrom = Point3::new(478.0, 278.0, -600.0);
+    cam.lookat = Point3::new(278.0, 278.0, 0.0);
+    cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+    cam.defocus_angle = 0.0;
+
+    cam.render(&world);
+}
+
+fn main() {
+  match 9 {
+        1 => random_spheres(),
+        2 => two_spheres(),
+        3 => earth(),
+        4 => two_perlin_spheres(),
+        5 => quads(),
+        6 => simple_light(),
+        7 => cornell_box(),
+        8 => cornell_smoke(),
+        9 => final_scene(200, 200, 10),
+        _ => (),
+  }
+}
 ```
+Listing 76: [main.rs] 最终场景
+
+![图 23: 最终场景](../../images/img-2.23-book2-final.jpg)

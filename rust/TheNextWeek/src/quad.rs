@@ -121,7 +121,7 @@ pub fn make_box(a: Point3, b: Point3, mat: Rc<dyn Material>) -> Rc<HittableList>
     Quad::new(Point3::new(min.x(), min.y(), max.z()), dx, dy, Rc::clone(&mat))
   ));
   sides.add(Rc::new(
-    Quad::new(Point3::new(max.x(), max.y(), min.z()), -dz, dy, Rc::clone(&mat))
+    Quad::new(Point3::new(max.x(), min.y(), max.z()), -dz, dy, Rc::clone(&mat))
   ));
   sides.add(Rc::new(
     Quad::new(Point3::new(max.x(), min.y(), min.z()), -dx, dy, Rc::clone(&mat))
