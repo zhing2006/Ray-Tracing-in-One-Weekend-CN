@@ -2876,7 +2876,7 @@ fn main() {
     }
 }
 ```
-Listing 75: [main.cc] 带有烟雾的康奈尔盒
+Listing 75: [main.rs] 带有烟雾的康奈尔盒
 
 ![图 22: 带有烟雾块的康奈尔盒](../../images/img-2.22-cornell-smoke.png)
 
