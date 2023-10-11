@@ -37,6 +37,18 @@
 
 感谢所有在这个项目中帮助过的人。你可以在本书末尾的致谢部分找到他们的名字。
 
+---
+
+另：从本章的中文化版本开始，Rust代码将不再放入单独的文件，而是直接整合到C++代码片段之下。并像此段文字一样前后用风格行分开。
+
+使用`cargo`创建工程
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    cargo new --name the_test_of_your_life TheRestOfYourLife
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 
 
 一个简单的蒙特卡洛程序
@@ -58,7 +70,7 @@
         }
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [las-vegas-algo]: <kbd>[vec3.h]</kbd> 一个拉斯维加斯算法]
+[Listing [las-vegas-algo]: <kbd>[vec3.h]</kbd> 一个拉斯维加斯算法]
 
 这段代码最终总会得到一个单位球中的随机点，但我们无法预先知道需要多长时间。可能只需要1次迭代，也可能需要2次、
 3次、4次甚至更多次。而蒙特卡洛程序将给出一个统计估计的答案，随着运行时间的增加，这个估计将变得越来越准确。
@@ -104,7 +116,71 @@
         std::cout << "Estimate of Pi = " << (4.0 * inside_circle) / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [estpi-1]: <kbd>[pi.cc]</kbd> 估算π]
+[Listing [estpi-1]: <kbd>[pi.cc]</kbd> 估算π]
+
+---
+Rust实现
+
+本章开始由于需要编译多个不同的案例，因此先需修改Cargo.toml文件。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ toml
+    [package]
+    name = "the_rest_of_your_life"
+    version = "0.1.0"
+    edition = "2021"
+
+    [[bin]]
+    name = "pi"
+    path = "src/bin/pi.rs"
+    test = false
+
+    [dependencies]
+    rand = "0"
+    stb_image = "0.2"
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+通过`[[bin]]`的方式加入不同的案例，同时为了让不同的案例能共享代码。添加src/lib.rs文件。
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub mod vec3;
+    pub mod color;
+    pub mod ray;
+    pub mod hittable;
+    pub mod sphere;
+    pub mod hittable_list;
+    pub mod rtweekend;
+    pub mod interval;
+    pub mod camera;
+    pub mod material;
+    pub mod aabb;
+    pub mod bvh;
+    pub mod texture;
+    pub mod rtw_stb_image;
+    pub mod perlin;
+    pub mod quad;
+    pub mod constant_medium;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+现在开始实现pi的计算：
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double_range;
+
+    fn main() {
+        const N: usize = 100000;
+        let mut inside_circle = 0;
+        (0..N).for_each(|_| {
+            let x = random_double_range(-1.0, 1.0);
+            let y = random_double_range(-1.0, 1.0);
+            if x * x + y * y < 1.0 {
+            inside_circle += 1;
+            }
+        });
+        println!("Estimate of pi: {:.12}", 4.0 * inside_circle as f64 / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 得到的π的答案会因为初始随机种子的不同而在不同的计算机上有所变化。在我的计算机上，
 这给出的答案是`Estimate of Pi = 3.143760000000`。
@@ -142,7 +218,33 @@
         }
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [estpi-2]: <kbd>[pi.cc]</kbd> 估算π，版本2]
+[Listing [estpi-2]: <kbd>[pi.cc]</kbd> 估算π，版本2]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double_range;
+
+    fn main() {
+        let mut inside_circle = 0;
+        let mut runs = 0;
+        loop {
+            runs += 1;
+            let x = random_double_range(-1.0, 1.0);
+            let y = random_double_range(-1.0, 1.0);
+            if x * x + y * y < 1.0 {
+                inside_circle += 1;
+            }
+
+            if runs % 100000 == 0 {
+                println!("Estimate of pi: {:.12}", 4.0 * inside_circle as f64 / runs as f64);
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 
 分层采样（抖动）
@@ -188,9 +290,44 @@
             << (4.0 * inside_circle_stratified) / (sqrt_N*sqrt_N) << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [estpi-3]: <kbd>[pi.cc]</kbd> 估算π，版本3]
+[Listing [estpi-3]: <kbd>[pi.cc]</kbd> 估算π，版本3]
 
 </div>
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::{
+        random_double,
+        random_double_range,
+    };
+
+    fn main() {
+        let mut inside_circle = 0;
+        let mut inside_circle_stratified = 0;
+        const SQRT_N: usize = 1000;
+        (0..SQRT_N).for_each(|i| {
+            (0..SQRT_N).for_each(|j| {
+                let x = random_double_range(-1.0, 1.0);
+                let y = random_double_range(-1.0, 1.0);
+                if x * x + y * y < 1.0 {
+                    inside_circle += 1;
+                }
+                let x = 2.0 * (i as f64 + random_double()) / SQRT_N as f64 - 1.0;
+                let y = 2.0 * (j as f64 + random_double()) / SQRT_N as f64 - 1.0;
+                if x * x + y * y < 1.0 {
+                    inside_circle_stratified += 1;
+                }
+            })
+        });
+
+        println!("Regular    Estimate of Pi = {:.12}", 4.0 * inside_circle as f64 / (SQRT_N * SQRT_N) as f64);
+        println!("Stratified Estimate of Pi = {:.12}", 4.0 * inside_circle_stratified as f64 / (SQRT_N * SQRT_N) as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 <div class='together'>
 在我的电脑上，结果如下：
@@ -272,13 +409,163 @@ $\phi_o$和$\theta_o$。在本书中，我们不会对输出的反射角进行�
         cam.render(world, lights);
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [estpi-3]: <kbd>[main.cc]</kbd> 在像素内部进行样本分层]
+[Listing [estpi-3]: <kbd>[main.cc]</kbd> 在像素内部进行样本分层]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub mod vec3;
+    pub mod color;
+    pub mod ray;
+    pub mod hittable;
+    pub mod sphere;
+    pub mod hittable_list;
+    pub mod rtweekend;
+    pub mod interval;
+    pub mod camera;
+    pub mod material;
+    pub mod aabb;
+    pub mod bvh;
+    pub mod texture;
+    pub mod rtw_stb_image;
+    pub mod perlin;
+    pub mod quad;
+    pub mod constant_medium;
+
+    use std::rc::Rc;
+
+    use vec3::{Vec3, Point3};
+    use color::Color;
+    use hittable_list::HittableList;
+    use camera::Camera;
+    use material::{
+        Material,
+        Lambertian,
+        DiffuseLight,
+    };
+    use quad::{
+        Quad,
+        make_box,
+    };
+    use hittable::{
+        Translate,
+        RotateY,
+    };
+
+    fn cornell_box() {
+        let mut world = HittableList::default();
+
+        let red: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.65, 0.05, 0.05)));
+        let white: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.73, 0.73, 0.73)));
+        let green: Rc<dyn Material> = Rc::new(Lambertian::new(Color::new(0.12, 0.45, 0.15)));
+        let light: Rc<dyn Material> = Rc::new(DiffuseLight::new_with_color(Color::new(15.0, 15.0, 15.0)));
+
+        world.add(Rc::new(
+            Quad::new(
+                Point3::new(555.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 555.0, 0.0),
+                vec3::Vec3::new(0.0, 0.0, 555.0),
+                green
+            )
+        ));
+        world.add(Rc::new(
+            Quad::new(
+                Point3::new(0.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 555.0, 0.0),
+                vec3::Vec3::new(0.0, 0.0, 555.0),
+                red
+            )
+        ));
+        world.add(Rc::new(
+            Quad::new(
+                Point3::new(343.0, 554.0, 332.0),
+                vec3::Vec3::new(-130.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 0.0, -105.0),
+                light
+            )
+        ));
+        world.add(Rc::new(
+            Quad::new(
+                Point3::new(0.0, 0.0, 0.0),
+                vec3::Vec3::new(555.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 0.0, 555.0),
+                Rc::clone(&white)
+            )
+        ));
+        world.add(Rc::new(
+            Quad::new(
+                Point3::new(555.0, 555.0, 555.0),
+                vec3::Vec3::new(-555.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 0.0, -555.0),
+                Rc::clone(&white)
+            )
+        ));
+        world.add(Rc::new(
+            Quad::new(
+                Point3::new(0.0, 0.0, 555.0),
+                vec3::Vec3::new(555.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 555.0, 0.0),
+                Rc::clone(&white)
+            )
+        ));
+
+        let box1 = make_box(
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(165.0, 330.0, 165.0),
+            Rc::clone(&white)
+        );
+        let box1 = Rc::new(RotateY::new(box1, 15.0));
+        let box1 = Rc::new(Translate::new(box1, vec3::Vec3::new(265.0, 0.0, 295.0)));
+        world.add(box1);
+
+        let box2 = make_box(
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(165.0, 165.0, 165.0),
+            Rc::clone(&white)
+        );
+        let box2 = Rc::new(RotateY::new(box2, -18.0));
+        let box2 = Rc::new(Translate::new(box2, vec3::Vec3::new(130.0, 0.0, 65.0)));
+        world.add(box2);
+
+        let mut cam = Camera::default();
+
+        cam.aspect_ratio = 1.0;
+        cam.image_width = 400;
+        cam.samples_per_pixel = 50;
+        cam.max_depth = 10;
+        cam.background = Color::default();
+
+        cam.vfov = 40.0;
+        cam.lookfrom = Point3::new(278.0, 278.0, -800.0);
+        cam.lookat = Point3::new(278.0, 278.0, 0.0);
+        cam.vup = vec3::Vec3::new(0.0, 1.0, 0.0);
+
+        cam.defocus_angle = 0.0;
+
+        cam.render(&world);
+    }
+
+    fn main() {
+        cornell_box();
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
       public:
         ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        void initialize() {
+            ...
+            sqrt_spp = int(sqrt(samples_per_pixel));
+            recip_sqrt_spp = 1.0 / sqrt_spp;
+            ...
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
+
         void render(const hittable& world) {
             initialize();
 
@@ -333,9 +620,104 @@ $\phi_o$和$\theta_o$。在本书中，我们不会对输出的反射角进行�
         }
 
         ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
+        int sqrt_spp;
+        double recip_sqrt_spp;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [render-estpi-3]: <kbd>[camera.h]</kbd> 在像素内部进行样本分层（渲染）]
+[Listing [render-estpi-3]: <kbd>[camera.h]</kbd> 在像素内部进行样本分层（渲染）]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub struct Camera {
+        ...
+        image_height: usize,    // Rendered image height
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        sqrt_spp: usize,        // Square root of samples per pixel
+        recip_sqrt_spp: f64,    // Reciprocal of square root of samples per pixel
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        center: Point3,         // Camera center
+        ...
+    }
+
+    impl Default for Camera {
+        fn default() -> Self {
+            Self {
+                ...
+                image_height: 0,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                sqrt_spp: 10.0_f64.sqrt() as usize,
+                recip_sqrt_spp: 1.0 / (10.0_f64.sqrt()),
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+                center: Point3::default(),
+                ...
+            }
+        }
+    }
+
+    impl Camera {
+        pub fn render(&mut self, world: &dyn Hittable) {
+            self.initialize();
+
+            println!("P3\n{} {}\n255", self.image_width, self.image_height);
+            let stdout = std::io::stdout();
+
+            for j in 0..self.image_height {
+                eprintln!("\rScanlines remaining: {}", self.image_height - j);
+                for i in 0..self.image_width {
+                    let mut pixel_color = Color::default();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                    for s_j in 0..self.sqrt_spp {
+                        for s_i in 0..self.sqrt_spp {
+                            let r = self.get_ray(i as i32, j as i32, s_i as i32, s_j as i32);
+                            pixel_color += self.ray_color(&r, self.max_depth, world);
+                        }
+                    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+                    pixel_color.write_color(&mut stdout.lock(), self.samples_per_pixel).unwrap();
+                }
+            }
+
+            eprintln!("\nDone.");
+        }
+
+        fn initialize(&mut self) {
+            self.image_height = (self.image_width as f64 / self.aspect_ratio) as usize;
+            self.image_height = if self.image_height < 1 { 1 } else { self.image_height };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            self.sqrt_spp = (self.samples_per_pixel as f64).sqrt() as usize;
+            self.recip_sqrt_spp = 1.0 / (self.sqrt_spp as f64);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+            self.center = self.lookfrom;
+            ...
+        }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn get_ray(&self, i: i32, j: i32, s_i: i32, s_j: i32) -> Ray {
+            // Get a randomly sampled camera ray for the pixel at location i,j.
+            let pixel_center = self.pixel00_loc + i as f64 * self.pixel_delta_u + j as f64 * self.pixel_delta_v;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            let pixel_sample = pixel_center + self.pixel_sample_square(s_i, s_j);
+            ...
+        }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn pixel_sample_square(&self, s_i: i32, s_j: i32) -> Vec3 {
+            // Returns a random point in the square surrounding a pixel at the origin.
+            let px = -0.5 + self.recip_sqrt_spp * (s_i as f64 + rtweekend::random_double());
+            let py = -0.5 + self.recip_sqrt_spp * (s_j as f64 + rtweekend::random_double());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            px * self.pixel_delta_u + py * self.pixel_delta_v
+        }
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 <div class='together'>
 如果我们将没有分层的结果与分层后的结果进行比较：
@@ -410,7 +792,29 @@ $\phi_o$和$\theta_o$。在本书中，我们不会对输出的反射角进行�
         std::cout << "Estimated area of unit circle = " << (4.0 * inside_circle) / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [estunitcircle]: <kbd>[pi.cc]</kbd> 估算单位圆的面积]
+[Listing [estunitcircle]: <kbd>[pi.cc]</kbd> 估算单位圆的面积]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double_range;
+
+    fn main() {
+        const N: usize = 100000;
+        let mut inside_circle = 0;
+        (0..N).for_each(|_| {
+            let x = random_double_range(-1.0, 1.0);
+            let y = random_double_range(-1.0, 1.0);
+            if x * x + y * y < 1.0 {
+                inside_circle += 1;
+            }
+        });
+        println!("Estimated area of unit circle: {:.12}", 4.0 * inside_circle as f64 / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -500,24 +904,23 @@ $\phi_o$和$\theta_o$。在本书中，我们不会对输出的反射角进行�
 我认为一些例子会有所帮助。
 
 
-Integrating x²
+积分 x²
 ---------------
-Let’s look at a classic integral:
+让我们来看一个经典的积分：
 
     $$ I = \int_{0}^{2} x^2 dx $$
 
-We could solve this using integration:
+我们可以使用积分来求解：
 
     $$ I = \frac{1}{3} x^3 \Big|_{0}^{2} $$
     $$ I = \frac{1}{3} (2^3 - 0^3) $$
     $$ I = \frac{8}{3} $$
 
-Or, we could solve the integral using a Monte Carlo approach. In computer sciency notation, we might
-write this as:
+或者，我们可以使用蒙特卡洛方法来求解积分。在计算机科学的符号表示中，我们可以写成：
 
     $$ I = \operatorname{area}( x^2, 0, 2 ) $$
 
-We could also write it as:
+我们还可以写成：
 
     $$  E[f(x) | a \leq x \leq b] = \frac{1}{b - a} \cdot \operatorname{area}(f(x), a, b) $$
     $$ \operatorname{average}(x^2, 0, 2) = \frac{1}{2 - 0} \cdot \operatorname{area}( x^2, 0, 2 ) $$
@@ -525,7 +928,7 @@ We could also write it as:
     $$ I = 2 \cdot \operatorname{average}(x^2, 0, 2) $$
 
 <div class='together'>
-The Monte Carlo approach:
+蒙特卡洛方法的实现：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #include "rtweekend.h"
@@ -548,16 +951,35 @@ The Monte Carlo approach:
         std::cout << "I = " << (b - a) * (sum / N) << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [integ-xsq-1]: <kbd>[integrate_x_sq.cc]</kbd> Integrating x^2]
+[Listing [integ-xsq-1]: <kbd>[integrate_x_sq.cc]</kbd> 积分 x^2]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double_range;
+
+    fn main() {
+        const A: f64 = 0.0;
+        const B: f64 = 2.0;
+        const N: usize = 1000000;
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+            let x = random_double_range(A, B);
+            sum += x * x;
+        });
+        println!("I = {:.12}", (B - A) * sum / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
 <div class='together'>
-This, as expected, produces approximately the exact answer we get with integration, _i.e._ $I =
-8/3$. You could rightly point to this example and say that the integration is actually a lot less
-work than the Monte Carlo. That might be true in the case where the function is $f(x) = x^2$, but
-there exist many functions where it might be simpler to solve for the Monte Carlo than for the
-integration, like $f(x) = sin^5(x)$.
+正如预期的那样，这个方法得到的结果与积分得到的准确答案大致相同，即 $I = 8/3$。你可能会指出这个例子并说，
+实际上积分比蒙特卡洛方法要简单得多。对于函数 $f(x) = x^2$ 来说，这可能是正确的，但存在许多函数，
+对于这些函数来说，使用蒙特卡洛方法求解可能比积分更简单，比如 $f(x) = sin^5(x)$。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
         for (int i = 0; i < N; i++) {
@@ -565,13 +987,12 @@ integration, like $f(x) = sin^5(x)$.
             sum += pow(sin(x), 5.0);
         }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [integ-sin5]: Integrating sin^5]
+[Listing [integ-sin5]: 积分 sin^5]
 
 </div>
 
 <div class='together'>
-We could also use the Monte Carlo algorithm for functions where an analytical integration does not
-exist, like $f(x) = \ln(\sin(x))$.
+我们还可以使用蒙特卡洛算法来处理无法进行解析积分的函数，比如 $f(x) = \ln(\sin(x))$。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     for (int i = 0; i < N; i++) {
@@ -579,119 +1000,89 @@ exist, like $f(x) = \ln(\sin(x))$.
         sum += log(sin(x));
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [integ-ln-sin]: Integrating ln(sin)]
+[Listing [integ-ln-sin]: 积分 ln(sin)]
 
 </div>
 
-In graphics, we often have functions that we can write down explicitly but that have a complicated
-analytic integration, or, just as often, we have functions that _can_ be evaluated but that _can't_
-be written down explicitly, and we will frequently find ourselves with a function that can _only_ be
-evaluated probabilistically. The function `ray_color` from the first two books is an example of a
-function that can only be determined probabilistically. We can’t know what color can be seen from
-any given place in all directions, but we can statistically estimate which color can be seen from
-one particular place, for a single particular direction.
+在图形学中，我们经常遇到一些可以明确写出但具有复杂解析积分的函数，或者经常遇到一些可以进行计算但无法明确写出的函数，
+而且我们经常会遇到一些只能以概率方式进行评估的函数。第一、二本书中的 `ray_color` 函数就是一个只能以概率方式确定的函数的例子。
+我们无法知道从任意给定位置在所有方向上能看到什么颜色，但我们可以统计估计从一个特定位置、一个特定方向上能看到的颜色。
 
 
-Density Functions
+密度函数
 ------------------
-The `ray_color` function that we wrote in the first two books, while elegant in its simplicity, has
-a fairly _major_ problem. Small light sources create too much noise. This is because our uniform
-sampling doesn’t sample these light sources often enough. Light sources are only sampled if a ray
-scatters toward them, but this can be unlikely for a small light, or a light that is far away. If
-the background color is black, then the only real sources of light in the scene are from the lights
-that are actually placed about the scene. There might be two rays that intersect at nearby points on
-a surface, one that is randomly reflected toward the light and one that is not. The ray that is
-reflected toward the light will appear a very bright color. The ray that is reflected to somewhere
-else will appear a very dark color. The two intensities should really be somewhere in the middle. We
-could lessen this problem if we steered both of these rays toward the light, but this would cause
-the scene to be inaccurately bright.
+我们在前两本书中编写的`ray_color`函数，虽然简洁优雅，但存在一个相当**严重**的问题。小的光源会产生太多的噪点。
+这是因为我们的均匀采样，而没有足够频繁地对这些光源进行采样。只有当光线向它们散射时，才会对光源进行采样，
+但对于小的光源或远离的光源，这种情况可能不太可能发生。如果背景颜色是黑色，那么场景中真正的光源只来自于实际放置在场景中的灯光。
+在表面上，可能有两条相交的光线，一条随机反射到光源，一条没有。反射到光源的光线将呈现出非常明亮的颜色。
+反射到其他地方的光线将呈现出非常暗的颜色。这两种强度应该位于中间某处。如果我们将这两条光线都引导向光源，
+我们可以减轻这个问题，但这将导致场景过于明亮。
 
-For any given ray, we usually trace from the camera, through the scene, and terminate at a light.
-But imagine if we traced this same ray from the light source, through the scene, and terminated at
-the camera. This ray would start with a bright intensity and would lose energy with each successive
-bounce around the scene. It would ultimately arrive at the camera, having been dimmed and colored by
-its reflections off various surfaces. Now, imagine if this ray was forced to bounce toward the
-camera as soon as it could. It would appear inaccurately bright because it hadn't been dimmed by
-successive bounces. This is analogous to sending more random samples toward the light. It would go a
-long way toward solving our problem of having a bright pixel next to a dark pixel, but it would then
-just make _all_ of our pixels bright.
+对于给定的光线，我们通常从相机开始，穿过场景，最终到达光源。但是想象一下，如果我们从光源开始追踪同样的光线，
+穿过场景，最终到达相机。这条光线将以较高的强度开始，并且在场景中的每次反弹中逐渐失去能量。
+最终，它将到达相机，经过各种表面的反射后变暗并着色。现在，想象一下，如果这条光线被迫尽快朝相机反弹，
+它将显得过于明亮，因为它没有经过连续的反弹而变暗。这类似于向光源发送更多的随机样本。
+这将在很大程度上解决我们在亮像素旁边有暗像素的问题，但这将使得**所有**像素都变亮。
 
-We can remove this inaccuracy by downweighting those samples to adjust for the over-sampling. How do
-we do this adjustment? Well, we'll first need to understand the concept of a _probability density
-function_. But to understand the concept of a _probability density function_, we'll first need to
-know what a _density function_ is.
+我们可以通过降低这些样本的权重来消除这种不准确性，以调整过采样的影响。我们如何进行这种调整呢？
+首先，我们需要了解**概率密度函数**的概念。但要理解**概率密度函数**的概念，我们首先需要知道什么是**密度函数**。
 
-A _density function_ is just the continuous version of a histogram. Here’s an example of a histogram
-from the histogram Wikipedia page:
+**密度函数**只是直方图的连续版本。下面是来自维基百科直方图页面的一个示例直方图：
 
-  ![Figure [histogram]: Histogram example](../images/fig-3.03-histogram.jpg)
+  ![Figure [histogram]: 直方图示例](../images/fig-3.03-histogram.jpg)
 
-If we had more items in our data source, the number of bins would stay the same, but each bin would
-have a higher frequency of each item. If we divided the data into more bins, we'd have more bins,
-but each bin would have a lower frequency of each item. If we took the number of bins and raised it
-to infinity, we'd have an infinite number of zero-frequency bins. To solve for this, we'll replace
-our histogram, which is a _discrete function_, with a _discrete density function_. A _discrete
-density function_ differs from a _discrete function_ in that it normalizes the y-axis to a fraction
-or percentage of the total, _i.e_ its density, instead of a total count for each bin. Converting
-from a _discrete function_ to a _discrete density function_ is trivial:
+如果我们的数据源中有更多的项，那么每个项的频率会增加，但每个箱子的数量保持不变。
+如果我们将数据分成更多的箱子，我们将有更多的箱子，但每个箱子中的每个项的频率会降低。
+如果我们将箱子的数量提高到无穷大，我们将有无限多个零频率的箱子。为了解决这个问题，
+我们将用**离散密度函数**替换我们的直方图，**离散密度函数**与**离散函数**的区别在于，
+它将y轴归一化为总数的分数或百分比，即密度，而不是每个箱子的总计数。从**离散函数**转换为**离散密度函数**非常简单：
 
-    $$ \text{Density of Bin i} = \frac{\text{Number of items in Bin i}}
-                                      {\text{Number of items total}} $$
+    $$ \text{第i个箱子的密度} = \frac{\text{第i个箱子中的项数}}
+                                      {\text{总项数}} $$
 
-Once we have a _discrete density function_, we can then convert it into a _density function_ by
-changing our discrete values into continuous values.
+一旦我们有了**离散密度函数**，我们就可以通过将离散值转换为连续值来将其转换为**密度函数**。
 
-    $$ \text{Bin Density} = \frac{(\text{Fraction of trees between height }H\text{ and }H’)}
-                            {(H-H’)} $$
+    $$ \text{箱子密度} = \frac{(\text{高度在}H\text{和}H'\text{之间的树的比例})}
+                            {(H-H')} $$
 
-So a _density function_ is a continuous histogram where all of the values are normalized against a
-total. If we had a specific tree we wanted to know the height of, we could create a _probability
-function_ that would tell us how likely it is for our tree to fall within a specific bin.
+因此，**密度函数**是一个连续的直方图，其中所有的值都相对于总数进行了归一化。
+如果我们想要知道特定树的高度，我们可以创建一个**概率函数**，告诉我们我们的树在特定箱子中的可能性有多大。
 
-    $$ \text{Probability of Bin i} = \frac{\text{Number of items in Bin i}}
-                                          {\text{Number of items total}} $$
+    $$ \text{第i个箱子的概率} = \frac{\text{第i个箱子中的项数}}
+                                          {\text{总项数}} $$
 
-If we combined our _probability function_ and our (continuous) _density function_, we could
-interpret that as a statistical predictor of a tree’s height:
+如果我们将我们的**概率函数**和（连续的）**密度函数**结合起来，我们可以将其解释为树高度的统计预测器：
 
-    $$ \text{Probability a random tree is between } H \text{ and } H’ =
-        \text{Bin Density}\cdot(H-H’)$$
+    $$ \text{随机树的高度在} H \text{和} H' \text{之间的概率} =
+        \text{箱子密度}\cdot(H-H') $$
 
-Indeed, with this continuous probability function, we can now say the likelihood that any given tree
-has a height that places it within any arbitrary span of multiple bins. This is a _probability
-density function_ (henceforth _PDF_). In short, a PDF is a continuous function that can be
-integrated over to determine how likely a result is over an integral.
+事实上，通过这个连续的概率函数，我们现在可以说任何给定的树的高度有多大可能落在任意跨越多个箱子的范围内。
+这就是**概率密度函数**（以下简称**PDF**）。简而言之，**PDF**是一个连续函数，可以进行积分，以确定一个积分上的结果有多大可能性。
 
 
-Constructing a PDF
+构建一个概率密度函数（PDF）
 -------------------
-Let’s make a PDF and play around with it to build up an intuition. We'll use the following function:
+让我们创建一个PDF并通过实例来建立直觉。我们将使用以下函数：
 
   ![Figure [linear-pdf]: A linear PDF](../images/fig-3.04-linear-pdf.jpg)
 
-What does this function do? Well, we know that a PDF is just a continuous function that defines the
-likelihood of an arbitrary range of values. This function $p(r)$ is constrained between $0$ and $2$
-and linearly increases along that interval. So, if we used this function as a PDF to generate a
-random number then the _probability_ of getting a number near zero would be less than the
-probability of getting a number near two.
+这个函数是做什么的呢？我们知道，PDF只是一个连续函数，用于定义任意值范围的可能性。这个函数$p(r)$在0到2之间受限，
+并且在该区间上线性增加。
+因此，如果我们将这个函数作为PDF来生成一个随机数，那么接近零的数字出现的概率将小于接近二的数字出现的概率。
 
-The PDF $p(r)$ is a linear function that starts with $0$ at $r=0$ and monotonically increases to its
-highest point at $p(2)$ for $r=2$. What is the value of $p(2)$? What is the value of $p(r)$? Maybe
-$p(2)$ is 2? The PDF increases linearly from 0 to 2, so guessing that the value of $p(2)$ is 2 seems
-reasonable. At least it looks like it can't be 0.
+PDF $p(r)$是一个线性函数，从$r=0$开始，单调递增到$r=2$时达到最高点$p(2)$。$p(2)$的值是多少？$p(r)$的值是多少？
+也许$p(2)$等于2？PDF从0线性增加到2，所以猜测$p(2)$的值为2似乎是合理的。至少看起来它不可能是0。
 
-Remember that the PDF is a probability function. We are constraining the PDF so that it lies in the
-range [0,2]. The PDF represents the continuous density function for a probabilistic list. If we know
-that everything in that list is contained within 0 and 2, we can say that the probability of getting
-a value between 0 and 2 is 100%. Therefore, the area under the curve must sum to 1:
+请记住，PDF是一个概率函数。我们将PDF限制在范围[0,2]内。PDF表示概率密度函数，用于表示概率列表的连续密度函数。
+如果我们知道列表中的所有内容都包含在0和2之间，我们可以说在0和2之间获得值的概率为100%。因此，曲线下的面积必须等于1：
 
     $$ \operatorname{area}(p(r), 0, 2) = 1 $$
 
-All linear functions can be represented as a constant term multiplied by a variable.
+所有线性函数都可以表示为一个常数项乘以一个变量。
 
     $$ p(r) = C \cdot r $$
 
-We need to solve for the value of $C$. We can use integration to work backwards.
+我们需要解出$C$的值。我们可以使用积分来逆推。
 
     $$ 1 = \operatorname{area}(p(r), 0, 2) $$
     $$ = \int_{0}^{2} C \cdot r dr $$
@@ -700,8 +1091,7 @@ We need to solve for the value of $C$. We can use integration to work backwards.
     $$ = C ( \frac{2^2}{2} - \frac{0}{2} ) $$
     $$ C = \frac{1}{2} $$
 
-That gives us the PDF of $p(r) = r/2$. Just as with histograms we can sum up (integrate) the region
-to figure out the probability that $r$ is in some interval $[x_0,x_1]$:
+这给出了$p(r) = r/2$的PDF。就像直方图一样，我们可以对区域进行求和（积分）以确定$r$在某个区间$[x_0,x_1]$内的概率：
 
     $$ \operatorname{Probability} (r | x_0 \leq r \leq x_1 )
        = \operatorname{area}(p(r), x_0, x_1)
@@ -709,46 +1099,37 @@ to figure out the probability that $r$ is in some interval $[x_0,x_1]$:
 
     $$ \operatorname{Probability} (r | x_0 \leq r \leq x_1 ) = \int_{x_0}^{x_1}  \frac{r}{2} dr $$
 
-To confirm your understanding, you should integrate over the region $r=0$ to $r=2$, you should get a
-probability of 1.
+为了确认你的理解，你可以对区域$r=0$到$r=2$进行积分，你应该得到一个概率为1。
 
-After spending enough time with PDFs you might start referring to a PDF as the probability that a
-variable $r$ is value $x$, _i.e._ $p(r=x)$. Don't do this. For a continuous function, the
-probability that a variable is a specific value is always zero. A PDF can only tell you the
-probability that a variable will fall within a given interval. If the interval you're checking
-against is a single value, then the PDF will always return a zero probability because its "bin" is
-infinitely thin (has zero width). Here's a simple mathematical proof of this fact:
+在研究了足够长时间的PDF之后，你可能会开始将PDF称为变量$r$取值为$x$的概率，即$p(r=x)$。但请不要这样做。
+对于连续函数来说，变量取特定值的概率总是为零。PDF只能告诉你变量落在给定区间内的概率。
+如果你检查的区间是一个单一的值，那么PDF将始终返回零概率，因为它的“bin”是无限细的（宽度为零）。
+以下是这个事实的一个简单数学证明：
 
     $$ \operatorname{Probability} (r = x) = \int_{x}^{x}  p(r) dr $$
     $$ = P(r) \Big|_{x}^{x} $$
     $$ = P(x) - P(x) $$
     $$ = 0 $$
 
-Finding the probability of a region surrounding x may not be zero:
+计算围绕$x$的区域的概率可能不为零：
 
     $$ \operatorname{Probability} (r | x - \Delta x < r < x + \Delta x ) =
          \operatorname{area}(p(r), x - \Delta x, x + \Delta x) $$
     $$ = P(x + \Delta x) - P(x - \Delta x) $$
 
 
-Choosing our Samples
+选择样本
 --------------------
-If we have a PDF for the function that we care about, then we have the probability that the function
-will return a value within an arbitrary interval. We can use this to determine where we should
-sample. Remember that this started as a quest to determine the best way to sample a scene so that we
-wouldn't get very bright pixels next to very dark pixels. If we have a PDF for the scene, then we
-can probabilistically steer our samples toward the light without making the image inaccurately
-bright. We already said that if we steer our samples toward the light then we _will_ make the image
-inaccurately bright. We need to figure out how to steer our samples without introducing this
-inaccuracy, this will be explained a little bit later, but for now we'll focus on generating samples
-if we have a PDF. How do we generate a random number with a PDF? For that we will need some more
-machinery. Don’t worry -- this doesn’t go on forever!
+如果我们有一个关心的函数的概率密度函数（PDF），那么我们就知道函数返回一个值落在任意区间内的概率。
+我们可以利用这一点来确定我们应该采样的位置。记住，我们最初的目标是确定如何采样场景，以避免在非常亮的像素旁边出现非常暗的像素。
+如果我们有场景的概率密度函数，我们可以在不使图像过度亮的情况下，通过概率地将样本导向光源。
+我们已经说过，如果我们将样本导向光源，那么图像将变得不准确地过亮。
+我们需要找出如何在不引入这种不准确性的情况下导向样本，稍后会解释这一点，但现在我们将专注于在有PDF的情况下生成样本。
+我们如何使用PDF生成随机数？为此，我们需要一些更多的工具。不要担心，这不会无休止地进行下去！
 
 <div class='together'>
-Our random number generator `random_double()` produces a random double between 0 and 1. The number
-generator is uniform between 0 and 1, so any number between 0 and 1 has equal likelihood. If our PDF
-is uniform over a domain, say $[0,10]$, then we can trivially produce perfect samples for this
-uniform PDF with
+我们的随机数生成器`random_double()`生成一个介于0和1之间的随机双精度数。该数生成器在0和1之间均匀分布，因此0和1之间的任何数的概率相等。
+如果我们的PDF在一个区域上是均匀的，比如$[0,10]$，那么我们可以通过以下方式轻松地生成这个均匀PDF的完美样本：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     10.0 * random_double()
@@ -756,32 +1137,25 @@ uniform PDF with
 
 </div>
 
-That's an easy case, but the vast majority of cases that we're going to care about are nonuniform.
-We need to figure out a way to convert a uniform random number generator into a nonuniform random
-number generator, where the distribution is defined by the PDF. We'll just _assume_ that there
-exists a function $f(d)$ that takes uniform input and produces a nonuniform distribution weighted by
-PDF. We just need to figure out a way to solve for $f(d)$.
+这是一个简单的情况，但我们关心的绝大多数情况都是非均匀的。我们需要找到一种方法将均匀随机数生成器转换为非均匀随机数生成器，其中分布由PDF定义。
+我们假设存在一个函数$f(d)$，它接受均匀输入并产生由PDF加权的非均匀分布。我们只需要找到一种方法来解出$f(d)$。
 
-For the PDF given above, where $p(r) = \frac{r}{2}$, the probability of a random sample is higher
-toward 2 than it is toward 0. There is a greater probability of getting a number between 1.8 and 2.0
-than between 0.0 and 0.2. If we put aside our mathematics hat for a second and put on our computer
-science hat, maybe we can figure out a smart way of partitioning the PDF. We know that there is a
-higher probability near 2 than near 0, but what is the value that splits the probability in half?
-What is the value that a random number has a 50% chance of being higher than and a 50% chance of
-being lower than? What is the $x$ that solves:
+对于上面给定的PDF，其中$p(r) = \frac{r}{2}$，随机样本的概率在2附近要高于0。在1.8和2.0之间获得一个数字的概率要比在0.0和0.2之间获得一个数字的概率大。
+如果我们暂时放下数学帽子，戴上计算机科学帽子，也许我们可以找到一种巧妙的方法来划分PDF。
+我们知道在2附近的概率要高于0附近的概率，但是哪个值将概率分成一半？
+哪个值使得随机数有50%的概率高于它，有50%的概率低于它？哪个$x$满足以下方程：
 
     $$ 50\% = \int_{0}^{x}  \frac{r}{2} dr  = \int_{x}^{2}  \frac{r}{2} dr $$
 
-Solving gives us:
+解得：
 
     $$ 0.5 = \frac{r^2}{4} \Big|_{0}^{x} $$
     $$ 0.5 = \frac{x^2}{4} $$
-    $$ x^2 = 2$$
-    $$ x = \sqrt{2}$$
+    $$ x^2 = 2 $$
+    $$ x = \sqrt{2} $$
 
-As a crude approximation we could create a function `f(d)` that takes as input `double d =
-random_double()`. If `d` is less than (or equal to) 0.5, it produces a uniform number in
-$[0,\sqrt{2}]$, if `d` is greater than 0.5, it produces a uniform number in $[\sqrt{2}, 2]$.
+作为一个粗略的近似，我们可以创建一个函数`f(d)`，它以`double d = random_double()`作为输入。如果`d`小于（或等于）0.5，
+它会在$[0,\sqrt{2}]$范围内生成一个均匀数，如果`d`大于0.5，它会在$[\sqrt{2}, 2]$范围内生成一个均匀数。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     double f(double d)
@@ -792,44 +1166,38 @@ $[0,\sqrt{2}]$, if `d` is greater than 0.5, it produces a uniform number in $[\s
             return sqrt(2.0) + (2 - sqrt(2.0)) * random_double();
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [crude-approx]: A crude, first-order approximation to nonuniform PDF]
+[Listing [crude-approx]: 一个粗略的、一阶近似的非均匀PDF]
 
 <div class='together'>
-While our initial random number generator was uniform from 0 to 1:
+虽然我们最初的随机数生成器是从0到1均匀分布的：
 
-   ![Figure [uniform-dist]: A uniform distribution](../images/fig-3.05-uniform-dist.jpg)
+   ![图 [uniform-dist]: 均匀分布](../images/fig-3.05-uniform-dist.jpg)
 
 </div>
 
 <div class='together'>
-Our, new, crude approximation for $\frac{r}{2}$ is nonuniform (but only just):
+我们的新的、粗略的$\frac{r}{2}$的近似是非均匀的（但只是近似）：
 
-    ![Figure [approx-f]: A nonuniform distribution for r/2](../images/fig-3.06-nonuniform-dist.jpg)
+    ![图 [approx-f]: r/2的非均匀分布](../images/fig-3.06-nonuniform-dist.jpg)
 
 </div>
 
-We had the analytical solution to the integration above, so we could very easily solve for the 50%
-value. But we could also solve for this 50% value experimentally. There will be functions that we
-either can't or don't want to solve for the integration. In these cases, we can get an experimental
-result close to the real value. Let's take the function:
+我们已经对上面的积分有了解析解，所以我们可以很容易地解出50%的值。但我们也可以通过实验解出这个50%的值。
+对于那些我们无法或不想解析求解积分的函数，我们可以得到一个接近真实值的实验结果。让我们来看一个函数：
 
     $$ p(x) = e^{\frac{-x}{2 \pi}} sin^2(x) $$
 
 <div class='together'>
-Which looks a little something like this:
+它看起来有点像这样：
 
-    ![Figure [exp-sin2]: A function that we don't want to solve analytically
-    ](../images/fig-3.07-exp-sin2.jpg)
+    ![图 [exp-sin2]: 我们不想解析求解的函数](../images/fig-3.07-exp-sin2.jpg)
 
 </div>
 
 <div class='together'>
-At this point you should be familiar with how to experimentally solve for the area under a curve.
-We'll take our existing code and modify it slightly to get an estimate for the 50% value. We want to
-solve for the $x$ value that gives us half of the total area under the curve. As we go along and
-solve for the rolling sum over N samples, we're also going to store each individual sample alongside
-its `p(x)` value. After we solve for the total sum, we'll sort our samples and add them up until we
-have an area that is half of the total. From $0$ to $2\pi$ for example:
+此时，您应该熟悉如何实验性地求解曲线下的面积。我们将使用现有的代码，并稍作修改，以获得50%值的估计。我们想要解决的是给出半个总面积的$x$值。
+当我们沿着解决N个样本的总和时，我们还将每个单独的样本与其`p(x)`值一起存储。在解决了总和之后，我们将对样本进行排序，并将它们相加，直到达到总和的一半。
+例如，从$0$到$2\pi$：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #include "rtweekend.h"
@@ -889,16 +1257,71 @@ have an area that is half of the total. From $0$ to $2\pi$ for example:
         std::cout << "Halfway = " << halfway_point << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [est-halfway]: <kbd>[estimate_halfway.cc]</kbd> Estimating the 50% point of a function]
+[Listing [est-halfway]: <kbd>[estimate_halfway.cc]</kbd> 估计函数的50%点]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::{
+        random_double_range, self,
+    };
+
+    struct Sample {
+        pub x: f64,
+        pub p_x: f64,
+    }
+
+    fn compare_by_x(a: &Sample, b: &Sample) -> std::cmp::Ordering {
+        a.x.partial_cmp(&b.x).unwrap()
+    }
+
+    fn main() {
+        const N: usize = 10000;
+        let mut sum = 0.0;
+
+        // iterate through all of our samples
+        let mut samples = Vec::new();
+        (0..N).for_each(|_| {
+            // Get the area under the curve
+            let x = random_double_range(0.0, 2.0 * rtweekend::PI);
+            let sin_x = x.sin();
+            let p_x = (-x / (2.0 * rtweekend::PI)).exp() * sin_x * sin_x;
+            sum += p_x;
+            // store this sample
+            samples.push(Sample { x, p_x });
+        });
+
+        // Sort the samples by x
+        samples.sort_by(compare_by_x);
+
+        // Find out the sample at which we have half of our area
+        let half_sum = sum / 2.0;
+        let mut halfway_point = 0.0;
+        let mut accum = 0.0;
+        for sample in samples.iter() {
+            accum += sample.p_x;
+            if accum >= half_sum {
+                halfway_point = sample.x;
+                break;
+            }
+        }
+
+        println!("Average = {:.12}", sum / N as f64);
+        println!("Area under curve = {:.12}", 2.0 * rtweekend::PI * sum / N as f64);
+        println!("Halfway = {:.12}", halfway_point);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
 <div class='together'>
-This code snippet isn't too different from what we had before. We're still solving for the sum over
-an interval (0 to $2\pi$). Only this time, we're also storing and sorting all of our samples by
-their input and output. We use this to determine the point at which they subtotal half of the sum
-across the entire interval. Once we know that our first $j$ samples sum up to half of the total sum,
-we know that the $j\text{th}$ $x$ roughly corresponds to our halfway point:
+这段代码片段与之前的代码相比并没有太大的不同。我们仍然解决了一个区间（从0到$2\pi$）上的总和。
+只是这一次，我们还通过输入和输出将所有样本存储和排序。
+我们使用这些样本来确定它们在整个区间上的子总和达到总和的一半的点。一旦我们知道前$j$个样本的总和达到总和的一半，
+我们就知道第$j$个$x$大致对应于我们的中点：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     Average = 0.314686555791
@@ -908,34 +1331,26 @@ we know that the $j\text{th}$ $x$ roughly corresponds to our halfway point:
 
 </div>
 
-If you solve for the integral from $0$ to $2.016$ and from $2.016$ to $2\pi$ you should get almost
-exactly the same result for both.
+如果您解出从$0$到$2.016$和从$2.016$到$2\pi$的积分，您应该得到几乎完全相同的结果。
 
-We have a method of solving for the halfway point that splits a PDF in half. If we wanted to, we
-could use this to create a nested binary partition of the PDF:
+我们有一种方法来解决将PDF分成一半的中点。如果我们愿意，我们可以使用这个方法创建一个嵌套的二进制分区的PDF：
 
-  1. Solve for halfway point of a PDF
-  2. Recurse into lower half, repeat step 1
-  3. Recurse into upper half, repeat step 1
+  1. 解决PDF的中点
+  2. 递归进入较小的一半，重复步骤1
+  3. 递归进入较大的一半，重复步骤1
 
-Stopping at a reasonable depth, say 6–10. As you can imagine, this could be quite computationally
-expensive. The computational bottleneck for the code above is probably sorting the samples. A naive
-sorting algorithm can have an algorithmic complexity of $\mathcal{O}(\mathbf{n^2})$ time, which is
-tremendously expensive. Fortunately, the sorting algorithm included in the standard library is
-usually much closer to $\mathcal{O}(\mathbf{n\log{}n})$ time, but this can still be quite expensive,
-especially for millions or billions of samples. But this will produce decent nonuniform
-distributions of nonuniform numbers. This divide and conquer method of producing nonuniform
-distributions is used somewhat commonly in practice, although there are much more efficient means of
-doing so than a simple binary partition. If you have an arbitrary function that you wish to use as
-the PDF for a distribution, you'll want to research the _Metropolis-Hastings Algorithm_.
+在一个合理的深度停止，比如6-10。正如您可以想象的那样，这可能非常耗费计算资源。上面的代码的计算瓶颈可能是对样本进行排序。
+一个朴素的排序算法的算法复杂度可能是$\mathcal{O}(\mathbf{n^2})$时间，这是非常昂贵的。
+幸运的是，标准库中包含的排序算法通常更接近$\mathcal{O}(\mathbf{n\log{}n})$时间，但这仍然可能非常昂贵，特别是对于数百万或数十亿个样本。
+但这将产生相当不错的非均匀分布的非均匀数。这种分而治之的方法用于生成非均匀分布在实践中相当常见，尽管有比简单的二进制分区更高效的方法。
+如果您有一个任意函数作为分布的PDF，您将需要研究_梅特罗波利斯-哈斯廷斯算法_。
 
 
-Approximating Distributions
+近似分布
 ---------------------------
-This was a lot of math and work to build up a couple of notions. Let's return to our initial PDF.
-For the intervals without an explicit probability, we assume the PDF to be zero. So for our example
-from the beginning of the chapter, $p(r) = 0$, for $r \notin [0,2]$. We can rewrite our $p(r)$ in
-piecewise fashion:
+在建立一些概念的过程中，我们进行了大量的数学推导和工作。现在让我们回到最初的概率密度函数（PDF）。
+对于没有明确概率的区间，我们假设概率密度函数为零。因此，对于本章开头的例子，$p(r) = 0$，对于 $r \notin [0,2]$。
+我们可以将 $p(r)$ 用分段函数的形式重新表示：
 
     $$ p(r)=\begin{cases}
             0           & r < 0           \\
@@ -944,25 +1359,22 @@ piecewise fashion:
        \end{cases}
     $$
 
-If you consider what we were trying to do in the previous section, a lot of math revolved around the
-_accumulated_ area (or _accumulated_ probability) from zero. In the case of the function
+如果你考虑一下我们在前一节中要做的事情，很多数学都围绕着从零开始的**累积**面积（或**累积**概率）展开。
+对于函数
 
     $$ f(x) = e^{\frac{-x}{2 \pi}} sin^2(x)  $$
 
-we cared about the accumulated probability from $0$ to $2\pi$ (100%) and the accumulated probability
-from $0$ to $2.016$ (50%). We can generalize this to an important term, the _Cumulative Distribution
-Function_ $P(x)$ is defined as:
+我们关心的是从 $0$ 到 $2\pi$（100%）的累积概率和从 $0$ 到 $2.016$（50%）的累积概率。
+我们可以将这个概念推广到一个重要的术语，即**累积分布函数**（CDF），定义如下：
 
     $$ P(x) =  \int_{-\infty}^{x}  p(x') dx' $$
 
-Or,
+或者，
 
     $$ P(x) = \operatorname{area}(p(x'), -\infty, x) $$
 
-Which is the amount of _cumulative_ probability from $-\infty$. We rewrote the integral in terms of
-$x'$ instead of $x$ because of calculus rules, if you're not sure what it means, don't worry about
-it, you can just treat it like it's the same. If we take the integration outlined above, we get the
-piecewise $P(r)$:
+它表示从$-\infty$开始的**累积**概率量。我们将积分中的变量从 $x$ 改为 $x'$，是因为根据微积分规则，
+如果你不确定它的含义，不用担心，你可以将它视为相同的。如果我们对上述积分进行计算，我们得到分段函数 $P(r)$：
 
     $$ P(r)=\begin{cases}
            0             & r < 0           \\
@@ -971,30 +1383,27 @@ piecewise $P(r)$:
        \end{cases}
     $$
 
-The _Probability Density Function_ (PDF) is the probability function that explains how likely an
-interval of numbers is to be chosen. The _Cumulative Distribution Function_ (CDF) is the
-distribution function that explains how likely all numbers smaller than its input is to be chosen.
-To go from the PDF to the CDF, you need to integrate from $-\infty$ to $x$, but to go from the CDF
-to the PDF, all you need to do is take the derivative:
+**概率密度函数**（PDF）是解释一个数字区间被选择的可能性的概率函数。
+**累积分布函数**（CDF）是解释比其输入更小的所有数字被选择的分布函数。
+要从 PDF 得到 CDF，你需要从 $-\infty$ 积分到 $x$，但要从 CDF 得到 PDF，你只需要取导数：
 
     $$ p(x) = \frac{d}{dx}P(x) $$
 
-If we evaluate the CDF, $P(r)$, at $r = 1.0$, we get:
+如果我们在 $r = 1.0$ 处评估 CDF $P(r)$，我们得到：
 
     $$ P(1.0) = \frac{1}{4} $$
 
-This says _a random variable plucked from our PDF has a 25% chance of being 1 or lower_. We want a
-function $f(d)$ that takes a uniform distribution between 0 and 1 (_i.e_ `f(random_double())`), and
-returns a random value according to a distribution that has the CDF $P(x) = \frac{x^2}{4}$. We don’t
-know yet know what the function $f(d)$ is analytically, but we do know that 25% of what it returns
-should be less than 1.0, and 75% should be above 1.0. Likewise, we know that 50% of what it returns
-should be less than $\sqrt{2}$, and 50% should be above $\sqrt{2}$. If $f(d)$ monotonically
-increases, then we would expect $f(0.25) = 1.0$ and $f(0.5) = \sqrt{2}$. This can be generalized to
-figure out $f(d)$ for every possible input:
+这表示**从我们的 PDF 中随机选择的变量有 25% 的概率小于等于 1.0**。
+我们想要一个函数 $f(d)$，它接受一个介于 0 和 1 之间的均匀分布（即 `f(random_double())`），
+并根据具有 CDF $P(x) = \frac{x^2}{4}$ 的分布返回一个随机值。
+我们还不知道函数 $f(d)$ 的解析形式，但我们知道它返回的结果中有 25% 应该小于 1.0，75% 应该大于 1.0。
+同样地，我们知道其中 50% 应该小于 $\sqrt{2}$，50% 应该大于 $\sqrt{2}$。
+如果 $f(d)$ 单调递增，那么我们期望 $f(0.25) = 1.0$，$f(0.5) = \sqrt{2}$。
+这可以推广到找出每个可能输入的 $f(d)$：
 
     $$ f(P(x)) = x $$
 
-Let's take some more samples:
+让我们取一些更多的样本：
 
     $$ P(0.0) = 0 $$
     $$ P(0.5) = \frac{1}{16} $$
@@ -1002,7 +1411,7 @@ Let's take some more samples:
     $$ P(1.5) = \frac{9}{16} $$
     $$ P(2.0) = 1 $$
 
-so, the function $f()$ has values
+因此，函数 $f()$ 的取值为
 
     $$ f(P(0.0)) = f(0) = 0 $$
     $$ f(P(0.5)) = f(\frac{1}{16}) = 0.5 $$
@@ -1010,64 +1419,57 @@ so, the function $f()$ has values
     $$ f(P(1.5)) = f(\frac{9}{16}) = 1.5 $$
     $$ f(P(2.0)) = f(1) = 2.0 $$
 
-We could use these intermediate values and interpolate between them to approximate $f(d)$:
+我们可以使用这些中间值并在它们之间进行插值来近似 $f(d)$：
 
-    ![Figure [approx f]: Approximating the nonuniform f()](../images/fig-3.08-approx-f.jpg)
+    ![Figure [approx f]: 近似非均匀分布 f()](../images/fig-3.08-approx-f.jpg)
 
-If you can't solve for the PDF analytically, then you can't solve for the CDF analytically. After
-all, the CDF is just the integral of the PDF. However, you can still create a distribution that
-approximates the PDF. If you take a bunch of samples from the random function you want the PDF from,
-you can approximate the PDF by getting a histogram of the samples and then converting to a PDF.
-Alternatively, you can do as we did above and sort all of your samples.
+如果你无法解析求解 PDF，那么你也无法解析求解 CDF。毕竟，CDF 只是 PDF 的积分。
+然而，你仍然可以创建一个近似 PDF 的分布。如果你从你想要得到 PDF 的随机函数中取一堆样本，
+你可以通过获取样本的直方图然后转换为 PDF 来近似 PDF。或者，你可以像上面那样对所有样本进行排序。
 
-Looking closer at the equality:
+仔细观察等式：
 
     $$ f(P(x)) = x $$
 
-That just means that $f()$ just undoes whatever $P()$ does. So, $f()$ is the inverse function:
+这意味着 $f()$ 只是撤销了 $P()$ 的操作。因此，$f()$ 是反函数：
 
     $$ f(d) = P^{-1}(x) $$
 
-For our purposes, if we have PDF $p()$ and cumulative distribution function $P()$, we can use this
-"inverse function" with a random number to get what we want:
+对于我们的目的，如果我们有 PDF $p()$ 和累积分布函数 $P()$，我们可以使用这个"反函数"和一个随机数来得到我们想要的结果：
 
     $$ f(d) = P^{-1} (\operatorname{random_double}()) $$
 
-For our PDF $p(r) = r/2$, and corresponding $P(r)$, we need to compute the inverse of $P(r)$. If we
-have
+对于我们的 PDF $p(r) = \frac{r}{2}$ 和相应的 $P(r)$，我们需要计算 $P(r)$ 的反函数。如果我们有
 
     $$ y = \frac{r^2}{4} $$
 
-we get the inverse by solving for $r$ in terms of $y$:
+我们通过解关于 $y$ 的方程来得到反函数：
 
     $$ r = \sqrt{4y} $$
 
-Which means the inverse of our CDF is defined as
+这意味着我们的 CDF 的反函数定义为
 
     $$ P^{-1}(r) = \sqrt{4y} $$
 
-Thus our random number generator with density $p(r)$ can be created with:
+因此，我们的具有密度 $p(r)$ 的随机数生成器可以使用以下公式创建：
 
     $$ f(d) = \sqrt{4\cdot\operatorname{random_double}()} $$
 
-Note that this ranges from 0 to 2 as we hoped, and if we check our work, we replace
-`random_double()` with $1/4$ to get 1, and also replace with $1/2$ to get $\sqrt{2}$, just as
-expected.
+请注意，这个公式的取值范围是从 0 到 2，与我们的期望一致，如果我们检查我们的工作，
+我们将 `random_double()` 替换为 $1/4$ 得到 1，也将其替换为 $1/2$ 得到 $\sqrt{2}$，正如我们所期望的那样。
 
 
-Importance Sampling
+重要性采样
 --------------------
-You should now have a decent understanding of how to take an analytical PDF and generate a function
-that produces random numbers with that distribution. We return to our original integral and try it
-with a few different PDFs to get a better understanding:
+现在你应该对如何使用分析概率密度函数（PDF）生成具有该分布的随机数有了相当好的理解。
+我们回到最初的积分问题，并尝试使用几个不同的PDF来更好地理解：
 
     $$ I = \int_{0}^{2} x^2 dx $$
 
 <div class='together'>
-The last time that we tried to solve for the integral we used a Monte Carlo approach, uniformly
-sampling from the interval $[0, 2]$. We didn't know it at the time, but we were implicitly using a
-uniform PDF between 0 and 2. This means that we're using a PDF = $1/2$ over the range $[0,2]$, which
-means the CDF is $P(x) = x/2$, so $f(d) = 2d$. Knowing this, we can make this uniform PDF explicit:
+上次我们尝试解决这个积分时，我们使用了蒙特卡洛方法，从区间$[0, 2]$均匀采样。当时我们并不知道，
+但我们隐式地使用了一个在$[0, 2]$范围内均匀分布的PDF。这意味着我们使用的PDF是$1/2$，
+对应的累积分布函数（CDF）是$P(x) = x/2$，因此$f(d) = 2d$。有了这个信息，我们可以将这个均匀分布的PDF显式地表示出来：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #include "rtweekend.h"
@@ -1103,31 +1505,55 @@ means the CDF is $P(x) = x/2$, so $f(d) = 2d$. Knowing this, we can make this un
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [integ-xsq-2]: <kbd>[integrate_x_sq.cc]</kbd> Explicit uniform PDF for $x^2$]
+[Listing [integ-xsq-2]: <kbd>[integrate_x_sq.cc]</kbd> $x^2$的显式均匀分布PDF]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double;
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+    fn f(d: f64) -> f64 {
+        2.0 * d
+    }
+
+    fn pdf(_x: f64) -> f64 {
+        0.5
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+    fn main() {
+        const N: usize = 1000000;
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            let x = f(random_double());
+            sum += x * x / pdf(x);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        });
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        println!("I = {:.12}", sum / N as f64);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
-There are a couple of important things to emphasize. Every value of $x$ represents one sample of the
-function $x^2$ within the distribution $[0, 2]$. We use a function $f$ to randomly select samples
-from within this distribution. We were previously multiplying the average over the interval
-(`sum / N`) times the length of the interval (`b - a`) to arrive at the final answer. Here, we
-don't need to multiply by the interval length--that is, we no longer need to multiply the average
-by $2$.
+有几个重要的事情需要强调。每个$x$的值代表分布$[0, 2]$中的一个样本点。我们使用函数$f$从该分布中随机选择样本。
+以前，我们将区间上的平均值（`sum / N`）乘以区间的长度（`b - a`）来得到最终答案。但在这里，我们不需要乘以区间长度，
+也就是说，我们不再需要将平均值乘以2。
 
-We need to account for the nonuniformity of the PDF of $x$. Failing to account for this
-nonuniformity will introduce bias in our scene. Indeed, this bias is the source of our inaccurately
-bright image--if we account for nonuniformity, we will get accurate results. The PDF will "steer"
-samples toward specific parts of the distribution, which will cause us to converge faster, but at
-the cost of introducing bias. To remove this bias, we need to down-weight where we sample more
-frequently, and to up-weight where we sample less frequently. For our new nonuniform random number
-generator, the PDF defines how much or how little we sample a specific portion.
-So the weighting function should be proportional to $1/\mathit{pdf}$.
-In fact it is _exactly_ $1/\mathit{pdf}$.
-This is why we divide `x*x` by `pdf(x)`.
+我们需要考虑到$x$的PDF的非均匀性。如果不考虑这种非均匀性，将会在场景中引入偏差。事实上，
+这种偏差是我们图像过亮的原因——如果我们考虑到非均匀性，我们将得到准确的结果。PDF会将样本“引导”到分布的特定部分，
+这将使我们更快地收敛，但代价是引入偏差。为了消除这种偏差，我们需要在采样频率较高的地方降低权重，在采样频率较低的地方增加权重。
+对于我们的新的非均匀随机数生成器，PDF定义了我们在特定部分采样的多少。因此，权重函数应该与$1/\mathit{pdf}$成比例。
+实际上，它确切地等于$1/\mathit{pdf}$。这就是为什么我们将`x*x`除以`pdf(x)`的原因。
 
-We can try to solve for the integral using the linear PDF $p(r) = \frac{r}{2}$, for which we were
-able to solve for the CDF and its inverse. To do that, all we need to do is replace the functions
-$f = \sqrt{4d}$ and $pdf = x/2$.
+我们可以尝试使用线性PDF $p(r) = \frac{r}{2}$ 来解决这个积分问题，我们已经能够求解其CDF和逆函数。
+为此，我们只需要将函数$f = \sqrt{4d}$和PDF $pdf = \frac{x}{2}$ 替换掉。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
     double f(double d) {
@@ -1150,13 +1576,37 @@ $f = \sqrt{4d}$ and $pdf = x/2$.
         std::cout << "I = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [integ-xsq-3]: <kbd>[integrate_x_sq.cc]</kbd> Integrating $x^2$ with linear PDF]
+[Listing [integ-xsq-3]: <kbd>[integrate_x_sq.cc]</kbd> 使用线性PDF积分$x^2$]
 
-If you compared the runs from the uniform PDF and the linear PDF, you would have probably found that
-the linear PDF converged faster. If you think about it, a linear PDF is probably a better
-approximation for a quadratic function than a uniform PDF, so you would expect it to converge
-faster. If that's the case, then we should just try to make the PDF match the integrand by turning
-the PDF into a quadratic function:
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double;
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+    fn f(d: f64) -> f64 {
+        (4.0 * d).sqrt()
+    }
+
+    fn pdf(x: f64) -> f64 {
+        x / 2.0
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+    fn main() {
+        const N: usize = 1000000;
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+            let x = f(random_double());
+            sum += x * x / pdf(x);
+        });
+        println!("I = {:.12}", sum / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+如果你比较了均匀PDF和线性PDF的运行结果，你可能会发现线性PDF收敛得更快。如果你仔细思考一下，线性PDF可能更好地逼近了二次函数，
+所以你会期望它收敛得更快。如果是这样的话，那么我们应该尝试使PDF与被积函数匹配，将PDF变成一个二次函数：
 
     $$ p(r)=\begin{cases}
             0           & r < 0           \\
@@ -1165,7 +1615,7 @@ the PDF into a quadratic function:
        \end{cases}
     $$
 
-Like the linear PDF, we'll solve for the constant $C$ by integrating to 1 over the interval:
+像线性PDF一样，我们通过在区间上积分使得常数$C$等于1：
 
     $$ 1 = \int_{0}^{2} C \cdot r^2 dr $$
     $$ = C \cdot \int_{0}^{2} r^2 dr $$
@@ -1173,7 +1623,7 @@ Like the linear PDF, we'll solve for the constant $C$ by integrating to 1 over t
     $$ = C ( \frac{2^3}{3} - \frac{0}{3} ) $$
     $$ C = \frac{3}{8} $$
 
-Which gives us:
+这给出了：
 
     $$ p(r)=\begin{cases}
             0           & r < 0           \\
@@ -1182,16 +1632,16 @@ Which gives us:
        \end{cases}
     $$
 
-And we get the corresponding CDF:
+并且我们得到相应的CDF：
 
     $$ P(r) = \frac{r^3}{8} $$
 
-and
+以及
 
     $$ P^{-1}(x) = f(d) = 8d^\frac{1}{3} $$
 
 <div class='together'>
-For just one sample we get:
+对于只有一个样本的情况，我们有：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
     double f(double d) {
@@ -1216,85 +1666,92 @@ For just one sample we get:
         std::cout << "I = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [integ-xsq-5]: <kbd>[integrate_x_sq.cc]</kbd> Integrating $x^2$, final version]
+[Listing [integ-xsq-5]: <kbd>[integrate_x_sq.cc]</kbd> 积分$x^2$，最终版本]
 
-This always returns the exact answer. Which, honestly, feels a bit like magic.
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend::random_double;
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+    fn f(d: f64) -> f64 {
+        8.0 * d.powf(1.0 / 3.0)
+    }
+
+    fn pdf(x: f64) -> f64 {
+        3.0 / 8.0 * x * x
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+    fn main() {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        const N: usize = 1;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+            let x = f(random_double());
+            sum += x * x / pdf(x);
+        });
+        println!("I = {:.12}", sum / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
+这总是返回精确的答案。说实话，这感觉有点像魔法。
 
 </div>
 
-A nonuniform PDF "steers" more samples to where the PDF is big, and fewer samples to where the PDF
-is small. By this sampling, we would expect less noise in the places where the PDF is big and more
-noise where the PDF is small. If we choose a PDF that is higher in the parts of the scene that have
-higher noise, and is smaller in the parts of the scene that have lower noise, we'll be able to
-reduce the total noise of the scene with fewer samples. This means that we will be able to converge
-to the correct scene _faster_ than with a uniform PDF. In effect, we are steering our samples toward
-the parts of the distribution that are more _important_. This is why using a carefully chosen
-nonuniform PDF is usually called _importance sampling_.
+非均匀PDF会将更多的样本引导到PDF较大的部分，而较少的样本引导到PDF较小的部分。通过这种采样，我们预期在PDF较大的部分噪声较少，
+在PDF较小的部分噪声较多。如果我们选择一个在场景中噪声较大的部分具有较高PDF值的PDF，并且在场景中噪声较小的部分具有较低PDF值的PDF，
+我们将能够用较少的样本减少场景的总噪声。这意味着我们将能够比使用均匀PDF更快地收敛到正确的场景。
+实际上，我们将样本引导到更重要的分布部分。这就是为什么通常将使用精心选择的非均匀PDF称为**重要性采样**。
 
-In all of the examples given, we always converged to the correct answer of $8/3$. We got the same
-answer when we used both a uniform PDF and the "correct" PDF ($i.e. f(d)=8d^{\frac{1}{3}}$). While
-they both converged to the same answer, the uniform PDF took much longer. After all, we only needed
-a single sample from the PDF that perfectly matched the integral. This should make sense, as we were
-choosing to sample the important parts of the distribution more often, whereas the uniform PDF just
-sampled the whole distribution equally, without taking importance into account.
+在所有给定的示例中，我们始终收敛到了正确的答案$8/3$。当使用均匀PDF和“正确”的PDF（即$f(d)=8d^{\frac{1}{3}}$）时，我们得到了相同的答案。
+虽然它们都收敛到了相同的答案，但均匀PDF需要更长的时间。毕竟，我们只需要从与积分完全匹配的PDF中获得一个样本。
+这是有道理的，因为我们选择更频繁地采样分布的重要部分，而均匀PDF只是均匀地采样整个分布，没有考虑到重要性。
 
-Indeed, this is the case for any PDF that you create--they will all converge eventually. This is
-just another part of the power of the Monte Carlo algorithm. Even the naive PDF where we solved for
-the 50% value and split the distribution into two halves: $[0, \sqrt{2}]$ and $[\sqrt{2}, 2]$. That
-PDF will converge. Hopefully you should have an intuition as to why that PDF will converge faster
-than a pure uniform PDF, but slower than the linear PDF ($i.e. f(d) = \sqrt{4d}$).
+实际上，你创建的任何PDF都将最终收敛到正确的答案。这只是蒙特卡洛算法的又一个强大之处。
+即使是我们通过求解50%的值并将分布分为两半的朴素PDF：$[0, \sqrt{2}]$和$[\sqrt{2}, 2]$。那个PDF也会收敛。
+希望你对为什么这个PDF会比纯均匀PDF收敛得更快有直观的理解，但比线性PDF（即$f(d) = \sqrt{4d}$）收敛得更慢。
 
-The perfect importance sampling is only possible when we already know the answer (we got $P$ by
-integrating $p$ analytically), but it’s a good exercise to make sure our code works.
+完美的重要性采样只有在我们已经知道答案时才可能实现（我们通过解析地积分$p$得到了$P$），但这是一个很好的练习，以确保我们的代码工作正常。
 
-Let's review the main concepts that underlie Monte Carlo ray tracers:
+让我们回顾一下蒙特卡洛光线追踪器的主要概念：
 
-  1. You have an integral of $f(x)$ over some domain $[a,b]$
-  2. You pick a PDF $p$ that is non-zero and non-negative over $[a,b]$
-  3. You average a whole ton of $\frac{f(r)}{p(r)}$ where $r$ is a random number with PDF $p$.
+  1. 你有一个在某个区域$[a,b]$上的$f(x)$的积分
+  2. 你选择一个在$[a,b]$上非零且非负的PDF $p$
+  3. 你对大量的$\frac{f(r)}{p(r)}$取平均值，其中$r$是具有PDF $p$的随机数。
 
-Any choice of PDF $p$ will always converge to the right answer, but the closer that $p$ approximates
-$f$, the faster that it will converge.
+任何选择的PDF $p$都将最终收敛到正确的答案，但$P$越接近$f$，收敛速度就越快。
 
 
 
-Monte Carlo Integration on the Sphere of Directions
+在球面上的蒙特卡洛积分
 ====================================================================================================
-In chapter One Dimensional Monte Carlo Integration we started with uniform random numbers and
-slowly, over the course of a chapter, built up more and more complicated ways of producing random
-numbers, before ultimately arriving at the intuition of PDFs, and how to use them to generate random
-numbers of arbitrary distribution.
+在一维蒙特卡洛积分章节中，我们从均匀随机数开始，然后逐渐在整个章节中构建了更加复杂的产生随机数的方法，
+最终形成了概率密度函数（PDF）的直觉，并学会如何使用PDF生成任意分布的随机数。
 
-All of the concepts covered in that chapter continue to work as we extend beyond a single dimension.
-Moving forward, we might need to be able to select a point from a two, three, or even higher
-dimensional space and then weight that selection by an arbitrary PDF. An important case of this--at
-least for ray tracing--is producing a random direction. In the first two books we generated a random
-direction by creating a random vector and rejecting it if it fell outside of the unit sphere. We
-repeated this process until we found a random vector that fell inside the unit sphere. Normalizing
-this vector produced points that lay exactly on the unit sphere and thereby represent a random
-direction. This process of generating samples and rejecting them if they are not inside a desired
-space is called _the rejection method_, and is found all over the literature. The method covered
-last chapter is referred to as _the inversion method_ because we invert a PDF.
+在扩展到多个维度时，所有在该章节中介绍的概念仍然适用。在接下来的内容中，我们可能需要从二维、三维甚至更高维空间中选择一个点，
+然后通过一个任意的PDF对该选择进行加权。在光线追踪中，一个重要的情况是生成一个随机方向。
+在前两本书中，我们通过创建一个随机向量，并在其超出单位球时将其拒绝，来生成一个随机方向。
+我们重复这个过程，直到找到一个落在单位球内的随机向量。对该向量进行归一化，就得到了落在单位球上的点，从而表示一个随机方向。
+这个生成样本在不符合所需空间的情况下拒绝它们的过程被称为**拒绝方法**，在文献中随处可见。
+上一章介绍的方法被称为**反演方法**，因为我们反演了一个PDF。
 
-Every direction in 3D space has an associated point on the unit sphere and can be generated by
-solving for the vector that travels from the origin to that associated point. You can think of
-choosing a random direction as choosing a random point in a constrained two dimensional plane: the
-plane created by mapping the unit sphere to Cartesian coordinates. The same methodology as before
-applies, but now we might have a PDF defined over two dimensions. Suppose we want to integrate this
-function over the surface of the unit sphere:
+3D空间中的每个方向都有一个与之关联的单位球上的点，并且可以通过求解从原点到该关联点的向量来生成它。
+你可以将选择一个随机方向看作是选择一个受限制的二维平面上的随机点：通过将单位球映射到笛卡尔坐标系而创建的平面。
+之前的方法仍然适用，但现在我们可能会在两个维度上定义一个PDF。假设我们想要在单位球的表面上进行积分：
 
   $$ f(\theta, \phi) = cos^2(\theta) $$
 
-Using Monte Carlo integration, we should just be able to sample $\cos^2(\theta) / p(r)$, where the
-$p(r)$ is now just $p(direction)$. But what is _direction_ in that context? We could make it based
-on polar coordinates, so $p$ would be in terms of $\theta$ and $\phi$ for $p(\theta, \phi)$. It
-doesn't matter which coordinate system you choose to use. Although, however you choose to do it,
-remember that a PDF must integrate to one over the whole surface and that the PDF represents the
-_relative probability_ of that direction being sampled. Recall that we have a `vec3` function to
-generate uniform random samples on the unit sphere (`random_unit_vector()`). What is the PDF of
-these uniform samples? As a uniform density on the unit sphere, it is $1/\mathit{area}$ of the
-sphere, which is $1/(4\pi)$. If the integrand is $\cos^2(\theta)$, and $\theta$ is the angle with
-the $z$ axis:
+使用蒙特卡洛积分，我们只需要对 $\cos^2(\theta) / p(r)$ 进行采样，其中 $p(r)$ 现在只是 $p(direction)$。
+但在这种情况下，什么是“direction”呢？我们可以基于极坐标来定义它，因此 $p$ 将是关于 $\theta$ 和 $\phi$ 的函数 $p(\theta, \phi)$。
+你选择使用哪种坐标系并不重要。无论你选择哪种方式，记住PDF必须在整个表面上积分为1，并且PDF表示了被采样方向的**相对概率**。
+回想一下，我们有一个用于在单位球上生成均匀随机样本的 `vec3` 函数（`random_unit_vector()`）。这些均匀样本的PDF是什么？
+作为单位球上的均匀密度，它是球体的 $1/\mathit{area}$，即 $1/(4\pi)$。
+如果被积函数是 $\cos^2(\theta)$，其中 $\theta$ 是与 $z$ 轴的夹角：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     double f(const vec3& d) {
@@ -1318,161 +1775,156 @@ the $z$ axis:
         std::cout << "I = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [main-sphereimp]: <kbd>[sphere_importance.cc]</kbd>
-    Generating importance-sampled points on the unit sphere]
+[Listing [main-sphereimp]: <kbd>[sphere_importance.cc]</kbd>
+    在单位球上生成重要采样点]
 
-The analytic answer is $\frac{4}{3} \pi$ -- if you remember enough advanced calc, check me! And the
-code above produces that. The key point here is that all of the integrals and the probability and
-everything else is over the unit sphere. The way to represent a single direction in 3D is its
-associated point on the unit sphere. The way to represent a range of directions in 3D is the amount
-of area on the unit sphere that those directions travel through. Call it direction, area, or _solid
-angle_ -- it’s all the same thing. Solid angle is the term that you'll usually find in the
-literature. You have radians (r) in $\theta$ over one dimension, and you have _steradians_ (sr) in
-$\theta$ _and_ $\phi$ over two dimensions (the unit sphere is a three dimensional object, but its
-surface is only two dimensional). Solid Angle is just the two dimensional extension of angles. If
-you are comfortable with a two dimensional angle, great! If not, do what I do and imagine the area
-on the unit sphere that a set of directions goes through. The solid angle $\omega$ and the projected
-area $A$ on the unit sphere are the same thing.
+---
+Rust实现
 
-  ![Figure [solid-angle]: Solid angle / projected area of a sphere
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend;
+    use the_rest_of_your_life::vec3::{self, Vec3};
+
+    fn f(d: Vec3) -> f64 {
+        d.z() * d.z()
+    }
+
+    fn pdf(_d: Vec3) -> f64 {
+        1.0 / (4.0 * rtweekend::PI)
+    }
+
+    fn main() {
+        const N: usize = 1000000;
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+            let d = vec3::random_unit_vector();
+            let f_d = f(d);
+            sum += f_d / pdf(d);
+        });
+        println!("I = {:.12}", sum / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
+解析解是 $\frac{4}{3} \pi$ -- 如果你还记得足够的高级数学知识，可以验证一下！上面的代码就得到了这个结果。
+关键点在于所有的积分、概率和其他一切都是在单位球上进行的。在3D中表示单个方向的方式是它在单位球上的关联点。
+在3D中表示一系列方向的方式是这些方向穿过的单位球上的面积。无论你称之为方向、面积还是**立体角**，它们都是同一个东西。
+立体角通常是文献中使用的术语。你在一维中有弧度（r）中的 $\theta$，在二维中有立体弧度（sr）中的 $\theta$ 和 $\phi$
+（单位球是一个三维对象，但其表面只有两个维度）。立体角只是角度的二维扩展。如果你对二维角度感到熟悉，那太好了！
+如果不熟悉，就像我一样，想象一下一组方向在单位球上经过的区域。立体角 $\omega$ 和单位球上的投影面积 $A$ 是相同的。
+
+  ![图 [solid-angle]: 球体的立体角/投影面积
   ](../images/fig-3.09-solid-angle.jpg)
 
-Now let’s go on to the light transport equation we are solving.
+现在让我们继续解决我们要解决的光传输方程。
 
 
 
-Light Scattering
+光散射
 ====================================================================================================
-In this chapter we won't actually program anything. We'll just be setting up for a big lighting
-change in the next chapter. Our ray tracing program from the first two books scatters a ray when it
-interacts with a surface or a volume. Ray scattering is the most commonly used model for simulating
-light propagation through a scene. This can naturally be modeled probabilistically. There are many
-things to consider when modeling the probabilistic scattering of rays.
+在本章中，我们不会实际编写任何代码。我们只是为下一章中的大型光照变化做准备。
+我们前两本书中的光线追踪程序在与表面或体积相互作用时会散射光线。光线散射是模拟光在场景中传播的最常用模型。
+这可以自然地以概率方式建模。在建模光线的概率散射时有许多要考虑的因素。
 
-
-Albedo
+反射率
 -------
-First, is the light absorbed?
+首先，光是否被吸收？
 
-Probability of light being scattered: $A$
+光被散射的概率：$A$
 
-Probability of light being absorbed: $1-A$
+光被吸收的概率：$1-A$
 
-Where here $A$ stands for _albedo_, which is latin for _whiteness_. Albedo is a precise technical
-term in some disciplines, but in all cases it is used to define some form of _fractional
-reflectance_. This _fractional reflectance_ (or albedo) will vary with color and (as we implemented
-for our glass material) can also vary with incident direction (the direction of the incoming ray).
-It can help to stop and remember that when we simulate light propagation, all we're doing is
-simulating the movement of photons through a space. If you remember your high school Physics then
-you should recall that every photon has a unique energy and wavelength associated by the Planck
-constant:
+这里的$A$代表**反射率**，在拉丁语中意为**白度**。反射率在某些学科中是一个精确的技术术语，但在所有情况下，它被用来定义某种形式的**分数反射率**。
+这个**分数反射率**（或反射率）会随着颜色的变化而变化，而且（如我们为玻璃材质实现的那样）还可以随着入射方向（入射光线的方向）的变化而变化。
+停下来回想一下，当我们模拟光的传播时，我们所做的就是模拟光子在空间中的运动。
+如果你还记得高中物理，你应该记得每个光子都有一个与普朗克常数相关联的唯一能量和波长：
 
-    $$ E = \frac{hc}{\lambda} $$
+$$ E = \frac{hc}{\lambda} $$
 
-Each individual photon has a _tiny_ amount of energy, but when you add enough of them up you get all
-of the illumination in your rendering. The absorption or scattering of a photon with a surface or a
-volume (or really anything that a photon can interact with) is probabilistically determined by the
-albedo of the object. Albedo can depend on color because some objects are more likely to absorb some
-wavelengths.
+每个单独的光子都有一点点能量，但当你把足够多的光子加在一起时，你就得到了渲染中的所有照明效果。
+光子与表面或体积（或实际上与光子可以相互作用的任何东西）的吸收或散射是由物体的反射率在概率上决定的。
+反射率可能会因为某些物体更有可能吸收某些波长而与颜色有关。
 
-In most physically based renderers, we would use a predefined set of specific wavelengths for the
-light color rather than RGB. As an example, we would replace our _tristimulus_ RGB renderer with
-something that specifically samples at 300nm, 350nm, 400nm, ..., 700nm. We can extend our intuition
-by thinking of R, G, and B as specific algebraic mixtures of wavelengths where R is _mostly_ red
-wavelengths, G is _mostly_ green wavelengths, and B is _mostly_ blue wavelengths. This is an
-approximation of the human visual system which has 3 unique sets of color receptors, called _cones_,
-that are each sensitive to different algebraic mixtures of wavelengths, roughly RGB, but are
-referred to as long, medium, and short cones (the names are in reference to the wavelengths that
-each cone is sensitive to, not the length of the cone). Just as colors can be represented by their
-strength in the RGB color space, colors can also be represented by how excited each set of cones is
-in the _LMS color space_ (long, medium, short).
+在大多数基于物理的渲染器中，我们会使用预定义的特定波长集合来表示光的颜色，而不是RGB。
+例如，我们会用在300nm、350nm、400nm、...、700nm处进行采样的方式来替代我们的三刺激值RGB渲染器。
+通过将R、G和B视为波长的特定代数混合物，其中R主要是红色波长，G主要是绿色波长，B主要是蓝色波长，我们可以扩展我们的直觉。
+这是人类视觉系统的近似表示，人类视觉系统具有3组独特的色感受器，称为**锥体**，每个色感受器对不同的波长代数混合物敏感，
+大致对应于RGB，但被称为长、中、短锥体（名称是根据每个锥体敏感的波长而命名的，而不是锥体的长度）。
+就像颜色可以在RGB颜色空间中通过它们的强度来表示一样，颜色也可以在_LMS颜色空间_（长、中、短）中通过每组锥体的兴奋程度来表示（长、中、短）。
 
-Scattering
+散射
 -----------
-If the light does scatter, it will have a directional distribution that we can describe as a PDF
-over solid angle. I will refer to this as its _scattering PDF_: $\operatorname{pScatter}()$. The
-scattering PDF will vary with outgoing direction: $\operatorname{pScatter}(\omega_o)$. The
-scattering PDF can also vary with _incident direction_:
-$\operatorname{pScatter}(\omega_i, \omega_o)$. You can see this varying with incident direction when
-you look at reflections off a road -- they become mirror-like as your viewing angle (incident angle)
-approaches grazing. The scattering PDF can vary with the wavelength of the light:
-$\operatorname{pScatter}(\omega_i, \omega_o, \lambda)$. A good example of this is a prism refracting
-white light into a rainbow. Lastly, the scattering PDF can also depend on the scattering position:
-$\operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda)$. The $\mathbf{x}$ is just math
-notation for the scattering position: $\mathbf{x} = (x, y, z)$. The albedo of an object can also
-depend on these quantities: $A(\mathbf{x}, \omega_i, \omega_o, \lambda)$.
+如果光线发生散射，它将具有我们可以描述为固定角度上的概率密度函数（PDF）的方向分布。我将其称为**散射PDF**：$\operatorname{pScatter}()$。
+散射PDF将随着出射方向的变化而变化：$\operatorname{pScatter}(\omega_o)$。散射PDF也可以随着**入射方向**的变化而变化：
+$\operatorname{pScatter}(\omega_i, \omega_o)$。当你观察道路上的反射时，你会看到它随着观察角度（入射角）接近接近时变得像镜子一样。
+散射PDF可以随着光的波长变化：$\operatorname{pScatter}(\omega_i, \omega_o, \lambda)$。一个很好的例子是棱镜将白光折射成彩虹。
+最后，散射PDF还可以依赖于散射位置：$\operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda)$。
+$\mathbf{x}$只是散射位置的数学表示：$\mathbf{x} = (x, y, z)$。
+物体的反射率也可以依赖于这些量：$A(\mathbf{x}, \omega_i, \omega_o, \lambda)$。
 
-The color of a surface is found by integrating these terms over the unit hemisphere by the incident
-direction:
+表面的颜色是通过在入射方向上对这些项进行单位半球积分来确定的：
 
-    $$ \operatorname{Color}_o(\mathbf{x}, \omega_o, \lambda) = \int_{\omega_i}
-        A(\mathbf{x}, \omega_i, \omega_o, \lambda) \cdot
-        \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda) \cdot
-        \operatorname{Color}_i(\mathbf{x}, \omega_i, \lambda) $$
+$$ \operatorname{Color}_o(\mathbf{x}, \omega_o, \lambda) = \int_{\omega_i}
+    A(\mathbf{x}, \omega_i, \omega_o, \lambda) \cdot
+    \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda) \cdot
+    \operatorname{Color}_i(\mathbf{x}, \omega_i, \lambda) $$
 
-We've added a $\operatorname{Color}_i$ term. The scattering PDF and the albedo at the surface of an
-object are acting as filters to the light that is shining on that point. So we need to solve for the
-light that is shining on that point. This is a recursive algorithm, and is the reason our
-`ray_color` function returns the color of the current object multiplied by the color of the next
-ray.
+我们添加了一个$\operatorname{Color}_i$项。散射PDF和物体表面的反射率充当了对照点上的光的滤波器。因此，我们需要解决照射在该点上的光。
+这是一个递归算法，也是我们的`ray_color`函数返回当前对象的颜色乘以下一条光线的颜色的原因。
 
-
-The Scattering PDF
+散射PDF
 -------------------
-If we apply the Monte Carlo basic formula we get the following statistical estimate:
+如果我们应用蒙特卡洛的基本公式，我们得到以下的统计估计：
 
-    $$ \operatorname{Color}_o(\mathbf{x}, \omega_o, \lambda) \approx \sum
-        \frac{A(\, \ldots \,) \cdot
-        \operatorname{pScatter}(\, \ldots \,) \cdot
-        \operatorname{Color}_i(\, \ldots \,)}
-        {p(\mathbf{x}, \omega_i, \omega_o, \lambda)} $$
+$$ \operatorname{Color}_o(\mathbf{x}, \omega_o, \lambda) \approx \sum
+    \frac{A(\, \ldots \,) \cdot
+    \operatorname{pScatter}(\, \ldots \,) \cdot
+    \operatorname{Color}_i(\, \ldots \,)}
+    {p(\mathbf{x}, \omega_i, \omega_o, \lambda)} $$
 
-where $p(\mathbf{x}, \omega_i, \omega_o, \lambda)$ is the PDF of whatever outgoing direction we
-randomly generate.
+其中$p(\mathbf{x}, \omega_i, \omega_o, \lambda)$是我们随机生成的任何出射方向的PDF。
 
-For a Lambertian surface we already implicitly implemented this formula for the special case where
-$pScatter(\, \ldots \,)$ is a cosine density. The $\operatorname{pScatter}(\, \ldots \,)$ of a
-Lambertian surface is proportional to $\cos(\theta_o)$, where $\theta_o$ is the angle relative to
-the surface normal. Let's solve for $C$ once more:
+对于Lambertian表面，我们已经隐式地为$pScatter(\, \ldots \,)$是余弦密度的特殊情况实现了这个公式。
+Lambertian表面的$\operatorname{pScatter}(\, \ldots \,)$与$\cos(\theta_o)$成正比，其中$\theta_o$是相对于表面法线的角度。
+让我们再次解决$C$：
 
-    $$ \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda) = C \cdot \cos(\theta_o) $$
+$$ \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda) = C \cdot \cos(\theta_o) $$
 
-All two dimensional PDFs need to integrate to one over the whole surface (remember that
-$\operatorname{pScatter}$ is a PDF). We set $\operatorname{pScatter}(\theta_o < 0) = 0$ so that we
-don't scatter below the horizon.
+所有二维PDF在整个表面上都需要积分为1（记住$\operatorname{pScatter}$是一个PDF）。
+我们设置$\operatorname{pScatter}(\theta_o < 0) = 0$，这样我们就不会在地平线以下进行散射。
 
-    $$ 1 = \int_{0}^{2 \pi} \int_{0}^{\pi / 2} C \cdot cos(\theta) dA $$
+$$ 1 = \int_{0}^{2 \pi} \int_{0}^{\pi / 2} C \cdot cos(\theta) dA $$
 
-To integrate over the hemisphere, remember that in spherical coordinates:
+要在半球上进行积分，记住在球坐标中：
 
-    $$ dA = \sin(\theta) d\theta d\phi $$
+$$ dA = \sin(\theta) d\theta d\phi $$
 
-So:
+所以：
 
-    $$ 1 = C \cdot \int_{0}^{2 \pi} \int_{0}^{\pi / 2} cos(\theta) sin(\theta) d\theta d\phi $$
-    $$ 1 = C \cdot 2 \pi \frac{1}{2} $$
-    $$ 1 = C \cdot \pi $$
-    $$ C = \frac{1}{\pi} $$
+$$ 1 = C \cdot \int_{0}^{2 \pi} \int_{0}^{\pi / 2} cos(\theta) sin(\theta) d\theta d\phi $$
+$$ 1 = C \cdot 2 \pi \frac{1}{2} $$
+$$ 1 = C \cdot \pi $$
+$$ C = \frac{1}{\pi} $$
 
-The integral of $\cos(\theta_o)$ over the hemisphere is $\pi$, so we need to we need to normalize by
-$\frac{1}{\pi}$. The PDF $\operatorname{pScatter}$ is only dependent on outgoing direction
-($\omega_o$), so we'll simplify its representation to just $\operatorname{pScatter}(\omega_o)$. Put
-all of this together and you get the scattering PDF for a Lambertian surface:
+$\cos(\theta_o)$在半球上的积分是$\pi$，所以我们需要通过$\frac{1}{\pi}$进行归一化。
+散射PDF $\operatorname{pScatter}$ 只依赖于出射方向（$\omega_o$），所以我们将简化其表示为$\operatorname{pScatter}(\omega_o)$。
+将所有这些放在一起，我们得到Lambertian表面的散射PDF：
 
-    $$ \operatorname{pScatter}(\omega_o) = \frac{\cos(\theta_o)}{\pi} $$
+$$ \operatorname{pScatter}(\omega_o) = \frac{\cos(\theta_o)}{\pi} $$
 
-We'll assume that the $p(\mathbf{x}, \omega_i, \omega_o, \lambda)$ is equal to the scattering PDF:
+我们将假设$p(\mathbf{x}, \omega_i, \omega_o, \lambda)$等于散射PDF：
 
-    $$ p(\omega_o) = \operatorname{pScatter}(\omega_o) = \frac{\cos(\theta_o)}{\pi} $$
+$$ p(\omega_o) = \operatorname{pScatter}(\omega_o) = \frac{\cos(\theta_o)}{\pi} $$
 
-The numerator and denominator cancel out, and we get:
+分子和分母相互抵消，我们得到：
 
-    $$ \operatorname{Color}_o(\mathbf{x}, \omega_o, \lambda) \approx \sum
-        A(\, \ldots \,) \cdot
-        \operatorname{Color}_i(\, \ldots \,) $$
+$$ \operatorname{Color}_o(\mathbf{x}, \omega_o, \lambda) \approx \sum
+    A(\, \ldots \,) \cdot
+    \operatorname{Color}_i(\, \ldots \,) $$
 
 <div class='together'>
-This is exactly what we had in our original `ray_color()` function!
+这正是我们最初的`ray_color()`函数中的内容！
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         return attenuation * ray_color(scattered, depth-1, world);
@@ -1480,54 +1932,44 @@ This is exactly what we had in our original `ray_color()` function!
 
 </div>
 
-The treatment above is slightly non-standard because I want the same math to work for surfaces and
-volumes. If you read the literature, you’ll see reflection defined by the _Bidirectional Reflectance
-Distribution Function_ (BRDF). It relates pretty simply to our terms:
+上面的处理稍微有些非标准，因为我希望相同的数学方法适用于表面和体积。如果你阅读文献，你会看到反射由**双向反射分布函数**（BRDF）定义。
+它与我们的术语非常简单地相关：
 
-    $$ BRDF(\omega_i, \omega_o, \lambda) = \frac{A(\mathbf{x}, \omega_i, \omega_o, \lambda) \cdot
-        \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda)}{\cos(\theta_o)} $$
+$$ BRDF(\omega_i, \omega_o, \lambda) = \frac{A(\mathbf{x}, \omega_i, \omega_o, \lambda) \cdot
+    \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o, \lambda)}{\cos(\theta_o)} $$
 
-So for a Lambertian surface for example, $BRDF = A / \pi$. Translation between our terms and BRDF is
-easy. For participating media (volumes), our albedo is usually called the _scattering albedo_, and
-our scattering PDF is usually called the _phase function_.
+因此，例如对于Lambertian表面，$BRDF = A / \pi$。我们的术语和BRDF之间的转换很容易。对于参与介质（体积），
+我们的反射率通常称为**散射反射率**，我们的散射PDF通常称为**相位函数**。
 
-All that we've done here is outline the PDF for the Lambertian scattering of a material. However,
-we'll need to generalize so that we can send extra rays in important directions, such as toward the
-lights.
+我们在这里所做的一切只是概述了材质的Lambertian散射的PDF。然而，我们需要进行泛化，
+以便我们可以在重要的方向上发送额外的光线，例如朝向光源的方向。
 
 
 
-Playing with Importance Sampling
+重要性采样的实验
 ====================================================================================================
-Our goal over the next several chapters is to instrument our program to send a bunch of extra rays
-toward light sources so that our picture is less noisy. Let’s assume we can send a bunch of rays
-toward the light source using a PDF $\operatorname{pLight}(\omega_o)$. Let’s also assume we have a
-PDF related to $operatorname{pScatter}$, and let’s call that $operatorname{pSurface}(\omega_o)$. A
-great thing about PDFs is that you can just use linear mixtures of them to form mixture densities
-that are also PDFs. For example, the simplest would be:
+在接下来的几章中，我们的目标是通过向光源发送大量额外的光线来减少图像的噪点。
+假设我们可以使用一个概率密度函数（PDF）$\operatorname{pLight}(\omega_o)$向光源发送大量光线。
+同时，假设我们有一个与$\operatorname{pScatter}$相关的PDF，记作$\operatorname{pSurface}(\omega_o)$。
+关于PDF的一个很好的特性是，你可以使用它们的线性组合形成混合密度，这些混合密度也是PDF。例如，最简单的情况是：
 
-  $$ p(\omega_o) = \frac{1}{2} \operatorname{pSurface}(\omega_o) +  \frac{1}{2}
-      \operatorname{pLight}(\omega_o)$$
+$$ p(\omega_o) = \frac{1}{2} \operatorname{pSurface}(\omega_o) +  \frac{1}{2} \operatorname{pLight}(\omega_o) $$
 
-As long as the weights are positive and add up to one, any such mixture of PDFs is a PDF. Remember,
-we can use any PDF: _all PDFs eventually converge to the correct answer_. So, the game is to figure
-out how to make the PDF larger where the product
+只要权重是正的并且加起来等于一，任何这样的PDF混合都是一个PDF。请记住，我们可以使用任何PDF：**所有的PDF最终都会收敛到正确的答案**。
+因此，我们的目标是找出如何使得乘积
 
-    $$ \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o) \cdot
-        \operatorname{Color}_i(\mathbf{x}, \omega_i) $$
+$$ \operatorname{pScatter}(\mathbf{x}, \omega_i, \omega_o) \cdot \operatorname{Color}_i(\mathbf{x}, \omega_i) $$
 
-is largest. For diffuse surfaces, this is mainly a matter of guessing where
-$\operatorname{Color}_i(\mathbf{x}, \omega_i)$ is largest. Which is equivalent to guessing where the
-most light is coming from.
+最大的地方，对应的PDF也会更大。对于漫反射表面来说，这主要是猜测$\operatorname{Color}_i(\mathbf{x}, \omega_i)$最大的位置，
+也就是猜测光线来自哪个方向。
 
-For a mirror, $\operatorname{pScatter}()$ is huge only near one direction, so
-$\operatorname{pScatter}()$ matters a lot more. In fact, most renderers just make mirrors a special
-case, and make the $\operatorname{pScatter}()/p()$ implicit -- our code currently does that.
+对于镜面材质，$\operatorname{pScatter}()$只在一个方向附近非常大，所以$\operatorname{pScatter}()$更重要。
+事实上，大多数渲染器都将镜面作为一种特殊情况处理，并将$\operatorname{pScatter}()/p()$隐含在内——我们的代码目前也是这样做的。
 
 
-Returning to the Cornell Box
+回到康奈尔盒
 -----------------------------
-Let’s adjust some parameters for the Cornell box:
+让我们调整一些康奈尔盒的参数：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     int main() {
@@ -1538,25 +1980,24 @@ Let’s adjust some parameters for the Cornell box:
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [cornell-box]: <kbd>[main.cc]</kbd> Cornell box, refactored]
+[Listing [cornell-box]: <kbd>[main.cc]</kbd> 康奈尔盒，重构]
 
 <div class='together'>
-At 600×600 my code produces this image in 15min on 1 core of my Macbook:
+在我的Macbook的一个核心上，我的代码在600×600的分辨率下在15分钟内生成了以下图像：
 
-  ![<span class='num'>Image 3:</span> Cornell box, refactored
+  ![<span class='num'>图像 3:</span> 康奈尔盒，重构
   ](../images/img-3.03-cornell-refactor1.jpg class='pixel')
 
 </div>
 
-Reducing that noise is our goal. We’ll do that by constructing a PDF that sends more rays to the
-light.
+我们的目标是减少噪点。我们将通过构建一个PDF来实现这一目标，该PDF会向光源发送更多的光线。
 
-First, let’s instrument the code so that it explicitly samples some PDF and then normalizes for
-that. Remember Monte Carlo basics: $\int f(x) \approx \sum f(r)/p(r)$. For the Lambertian material,
-let’s sample like we do now: $p(\omega_o) = \cos(\theta_o) / \pi$.
+首先，让我们修改代码，以便明确地对某个PDF进行采样，然后进行归一化。
+记住蒙特卡洛的基本原理：$\int f(x) \approx \sum f(r)/p(r)$。对于Lambertian材质，
+让我们像现在一样进行采样：$p(\omega_o) = \cos(\theta_o) / \pi$。
 
 <div class='together'>
-We modify the base-class `material` to enable this importance sampling:
+我们修改基类`material`以启用这种重要性采样：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class material {
@@ -1572,13 +2013,32 @@ We modify the base-class `material` to enable this importance sampling:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-material]: <kbd>[material.h]</kbd>
-    The material class, adding importance sampling]
+[Listing [class-material]: <kbd>[material.h]</kbd>
+    material类，添加重要性采样]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub trait Material {
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool;
+        fn emitted(&self, _u: f64, _v: f64, _p: vec3::Point3) -> Color {
+            Color::new(0.0, 0.0, 0.0)
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scattering_pdf(&self, _r_in: &Ray, _rec: &HitRecord, _scattered: &Ray) -> f64 {
+            0.0
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
 <div class='together'>
-And the `lambertian` material becomes:
+Lambertian材质变为：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class lambertian : public material {
@@ -1611,13 +2071,45 @@ And the `lambertian` material becomes:
         shared_ptr<texture> albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-lambertian-impsample]: <kbd>[material.h]</kbd>
-    Lambertian material, modified for importance sampling]
+[Listing [class-lambertian-impsample]: <kbd>[material.h]</kbd>
+    Lambertian材质，修改为重要性采样]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Lambertian {
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+            let mut scatter_direction = rec.normal + vec3::random_unit_vector();
+
+            // 捕捉退化的散射方向
+            if scatter_direction.near_zero() {
+                scatter_direction = rec.normal;
+            }
+
+            *scattered = Ray::new_with_time(rec.p, scatter_direction, r_in.time());
+            *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+            true
+        }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scattering_pdf(&self, _r_in: &Ray, rec: &HitRecord, scattered: &Ray) -> f64 {
+            let cos_theta = vec3::dot(rec.normal, vec3::unit_vector(scattered.direction()));
+            if cos_theta < 0.0 {
+                0.0
+            } else {
+                cos_theta / rtweekend::PI
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
 <div class='together'>
-And the `camera::ray_color` function gets a minor modification:
+`camera::ray_color`函数进行了一些小修改：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -1627,11 +2119,11 @@ And the `camera::ray_color` function gets a minor modification:
         color ray_color(const ray& r, int depth, const hittable& world) const {
             hit_record rec;
 
-            // If we've exceeded the ray bounce limit, no more light is gathered.
+            // 如果我们超过了光线反弹限制，就不再收集光线。
             if (depth <= 0)
                 return color(0,0,0);
 
-            // If the ray hits nothing, return the background color.
+            // 如果光线没有击中了世界中的任何东西，则返回背景颜色。
             if (!world.hit(r, interval(0.001, infinity), rec))
                 return background;
 
@@ -1655,25 +2147,68 @@ And the `camera::ray_color` function gets a minor modification:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-impsample]: <kbd>[camera.h]</kbd>
-    The ray_color function, modified for importance sampling]
+[Listing [ray-color-impsample]: <kbd>[camera.h]</kbd>
+    ray_color函数，修改为重要性采样]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+        ...
+
+        fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable) -> Color {
+            let mut rec = HitRecord::default();
+
+            // 如果我们超过了光线反弹限制，就不再收集光线。
+            if depth == 0 {
+                return Color::default();
+            }
+
+            // 如果光线没有击中了世界中的任何东西，则返回背景颜色。
+            if !world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+                return self.background;
+            }
+
+            if let Some(mat) = rec.mat.clone() {
+                let mut scattered = Ray::default();
+                let mut attenuation = Color::default();
+                let color_from_emission = mat.emitted(rec.u, rec.v, rec.p);
+                if !mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
+                    return color_from_emission;
+                }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
+                let pdf = scattering_pdf;
+
+                let color_from_scatter = (attenuation * scattering_pdf * self.ray_color(&scattered,  depth - 1, world)) / pdf;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                color_from_emission + color_from_scatter
+            } else {
+                Color::default()
+            }
+        }
+
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
-You should get exactly the same picture. Which _should make sense_, as the scattered part of
-`ray_color` is getting multiplied by `scattering_pdf / pdf`, and as `pdf` is equal to
-`scattering_pdf` is just the same as multiplying by one.
+你应该得到完全相同的图像。这是有道理的，因为`ray_color`的散射部分乘以了`scattering_pdf / pdf`，
+而由于`pdf`等于`scattering_pdf`，所以相当于乘以了1。
 
 
-Using a Uniform PDF Instead of a Perfect Match
+使用均匀概率密度函数（PDF）而不是完美匹配
 ----------------------------------------------
-Now, just for the experience, let's try using a different sampling PDF. We'll continue to have our
-reflected rays weighted by Lambertian, so $\cos(\theta_o)$, and we'll keep the scattering PDF as is,
-but we'll use a different PDF in the denominator. We will sample using a uniform PDF about the
-hemisphere, so we'll set the denominator to $1/2\pi$. This will still converge on the correct
-answer, as all we've done is change the PDF, but since the PDF is now less of a perfect match for
-the real distribution, it will take longer to converge. Which, for the same number of samples means
-a noisier image:
+现在，为了体验一下，让我们尝试使用不同的采样PDF。我们仍然将反射光线按照Lambertian（$\cos(\theta_o)$）进行加权，
+保持散射PDF不变，但是我们将在分母中使用不同的PDF。我们将使用均匀分布的PDF来对半球进行采样，因此我们将分母设置为$1/2\pi$。
+这仍然会收敛到正确的答案，因为我们只是改变了PDF，但由于PDF现在不再完全匹配真实分布，收敛所需的时间会更长。
+这意味着对于相同数量的样本，图像会更加嘈杂：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -1683,11 +2218,11 @@ a noisier image:
         color ray_color(const ray& r, int depth, const hittable& world) const {
             hit_record rec;
 
-            // If we've exceeded the ray bounce limit, no more light is gathered.
+            // 如果超过了光线反射次数的限制，不再收集光线。
             if (depth <= 0)
                 return color(0,0,0);
 
-            // If the ray hits nothing, return the background color.
+            // 如果光线没有击中任何物体，返回背景颜色。
             if (!world.hit(r, interval(0.001, infinity), rec))
                 return background;
 
@@ -1709,16 +2244,62 @@ a noisier image:
             return color_from_emission + color_from_scatter;
         }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-uniform]: <kbd>[camera.h]</kbd>
-    The ray_color function, now with a uniform PDF in the denominator]
+[Listing [ray-color-uniform]: <kbd>[camera.h]</kbd>
+    ray_color函数，现在分母中使用均匀PDF]
 
-You should get a very similar result to before, only with slightly more noise, it may be hard to
-see.
+---
+Rust实现
 
-  ![<span class='num'>Image 4:</span> Cornell box, with imperfect PDF
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+        ...
+
+        fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable) -> Color {
+            let mut rec = HitRecord::default();
+
+            // 如果我们超过了光线反弹限制，就不再收集光线。
+            if depth == 0 {
+                return Color::default();
+            }
+
+            // 如果光线没有击中了世界中的任何东西，则返回背景颜色。
+            if !world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+                return self.background;
+            }
+
+            if let Some(mat) = rec.mat.clone() {
+                let mut scattered = Ray::default();
+                let mut attenuation = Color::default();
+                let color_from_emission = mat.emitted(rec.u, rec.v, rec.p);
+                if !mat.scatter(r, &rec, &mut attenuation, &mut scattered) {
+                    return color_from_emission;
+                }
+
+                let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let pdf = 1.0 / (2.0 * rtweekend::PI);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                let color_from_scatter = (attenuation * scattering_pdf * self.ray_color(&scattered,  depth - 1, world)) / pdf;
+
+                color_from_emission + color_from_scatter
+            } else {
+                Color::default()
+            }
+        }
+
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
+你应该得到与之前非常相似的结果，只是稍微更嘈杂一些，可能很难看清楚。
+
+  ![<span class='num'>图像 4:</span> Cornell 盒子，使用不完美的PDF
   ](../images/img-3.04-cornell-refactor2.jpg class='pixel')
 
-Make sure to return the PDF to the scattering PDF.
+确保将PDF返回到散射PDF。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
             ...
@@ -1730,22 +2311,16 @@ Make sure to return the PDF to the scattering PDF.
 
             ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-return]: <kbd>[camera.h]</kbd> Return the PDF to the same as scattering PDF]
+[Listing [ray-color-return]: <kbd>[camera.h]</kbd> 将PDF返回到与散射PDF相同的值]
 
 
-Random Hemispherical Sampling
+随机半球采样
 ---------------------------
-To confirm our understanding, let's try a different scattering distribution. For this one, we'll
-attempt to repeat the uniform hemispherical scattering from the first book. There's nothing wrong
-with this technique, but we are no longer treating our objects as Lambertian. Lambertian is a
-specific type of diffuse material that requires a $\cos(\theta_o)$ scattering distribution. Uniform
-hemispherical scattering is a different diffuse material. If we keep the material the same but
-change the PDF, as we did in last section, we will still converge on the same answer, but our
-convergence may take more or less samples. However, if we change the material, we will have
-fundamentally changed the render and the algorithm will converge on a different answer. So when we
-replace Lambertian diffuse with uniform hemispherical diffuse we should expect the outcome of our
-render to be _materially_ different. We're going to adjust our scattering direction and scattering
-PDF:
+为了确认我们的理解，让我们尝试一种不同的散射分布。对于这个例子，我们将尝试重复第一本书中的均匀半球散射。
+这种技术没有问题，但我们不再将物体视为Lambertian材质。Lambertian是一种特定类型的漫反射材质，需要一个$\cos(\theta_o)$的散射分布。
+均匀半球散射是一种不同的漫反射材质。如果我们保持材质不变，但改变概率密度函数（PDF），就像在上一节中所做的那样，我们仍然会收敛到相同的答案，
+但我们的收敛可能需要更多或更少的样本。然而，如果我们改变材质，我们将从根本上改变渲染结果，算法将收敛到一个不同的答案。
+因此，当我们用均匀半球漫反射替换Lambertian漫反射时，我们应该期望渲染结果在**实质上**有所不同。我们将调整散射方向和散射PDF：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class lambertian : public material {
@@ -1777,26 +2352,51 @@ PDF:
 
         ...
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [scatter-mod]: <kbd>[material.h]</kbd> Modified PDF and scatter function]
+[Listing [scatter-mod]: <kbd>[material.h]</kbd> 修改后的PDF和scatter函数]
 
-This new diffuse material is actually just $p(\omega_o) = \frac{1}{2\pi}$ for the scattering PDF. So
-our uniform PDF that was an imperfect match for Lambertian diffuse is actually a perfect match for
-our uniform hemispherical diffuse. When rendering, we should get a slightly different image.
+---
+Rust实现
 
-  ![<span class='num'>Image 5:</span> Cornell box, with uniform hemispherical sampling
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Lambertian {
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            let mut scatter_direction = vec3::random_on_hemisphere(rec.normal);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+            // 捕捉退化的散射方向
+            if scatter_direction.near_zero() {
+                scatter_direction = rec.normal;
+            }
+
+            *scattered = Ray::new_with_time(rec.p, scatter_direction, r_in.time());
+            *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+            true
+        }
+
+        fn scattering_pdf(&self, _r_in: &Ray, _rec: &HitRecord, _scattered: &Ray) -> f64 {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            1.0 / (2.0 * rtweekend::PI)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
+这种新的漫反射材质实际上只是散射PDF为$p(\omega_o) = \frac{1}{2\pi}$。因此，我们的均匀PDF虽然不完全匹配Lambertian漫反射，
+但却完全匹配我们的均匀半球漫反射。在渲染时，我们应该得到一个略有不同的图像。
+
+  ![<span class='num'>图像 5:</span> Cornell盒子，使用均匀半球采样
   ](../images/img-3.04-cornell-refactor2.jpg class='pixel')
 
-It’s pretty close to our old picture, but there are differences that are not just noise. The front
-of the tall box is much more uniform in color. If you aren't sure what the best sampling pattern for
-your material is, it's pretty reasonable to just go ahead and assume a uniform PDF, and while that
-might converge slowly, it's not going to ruin your render. That said, if you're not sure what the
-correct sampling pattern for your material is, your choice of PDF is not going to be your biggest
-concern, as incorrectly choosing your scattering function _will_ ruin your render. At the very least
-it will produce an incorrect result. You may find yourself with the most difficult kind of bug to
-find in a Monte Carlo program -- a bug that produces a reasonable looking image! You won’t know if
-the bug is in the first version of the program, or the second, or both!
+它与我们之前的图片非常接近，但存在着不仅仅是噪声的差异。高盒子的正面颜色更加均匀。如果你不确定材质的最佳采样模式是什么，
+假设一个均匀的PDF是相当合理的，虽然收敛速度可能较慢，但不会破坏你的渲染。也就是说，如果你不确定材质的正确采样模式，
+你选择的PDF不会是你最大的担忧，因为选择错误的散射函数将会破坏你的渲染。至少它会产生一个不正确的结果。
+你可能会发现自己在蒙特卡洛程序中遇到最难找到的错误之一——产生一个看起来合理的图像的错误！你不会知道这个错误是在第一个版本的程序中，
+还是在第二个版本中，或者两者都有问题！
 
-Let’s build some infrastructure to address this.
+让我们构建一些基础设施来解决这个问题。
 
 
 
@@ -1893,7 +2493,7 @@ We can output some of these:
         }
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [rand-unit-sphere-plot]: <kbd>[sphere_plot.cc]</kbd> Random points on the unit sphere]
+[Listing [rand-unit-sphere-plot]: <kbd>[sphere_plot.cc]</kbd> Random points on the unit sphere]
 
 </div>
 
@@ -1965,7 +2565,7 @@ $f()/p() = \cos^3(\theta) / \frac{1}{2\pi}$, and we can test this:
         std::cout << "Estimate = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [cos-cubed]: <kbd>[cos_cubed.cc]</kbd> Integration using $cos^3(x)$]
+[Listing [cos-cubed]: <kbd>[cos_cubed.cc]</kbd> Integration using $cos^3(x)$]
 
 </div>
 
@@ -2006,7 +2606,7 @@ Here's a function that generates random vectors weighted by this PDF:
         return vec3(x, y, z);
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [random-cosine-direction]: <kbd>[vec3.h]</kbd>
+[Listing [random-cosine-direction]: <kbd>[vec3.h]</kbd>
     Random cosine direction utility function]
 
 </div>
@@ -2041,7 +2641,7 @@ Here's a function that generates random vectors weighted by this PDF:
         std::cout << "Estimate = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [cos-density]: <kbd>[cos_density.cc]</kbd> Integration with cosine density function]
+[Listing [cos-density]: <kbd>[cos_density.cc]</kbd> Integration with cosine density function]
 
 We can generate other densities later as we need them. This `random_cosine_direction()` function
 produces a random direction weighted by $\cos(\theta)$ where $\theta$ is the angle from the $z$
@@ -2190,7 +2790,7 @@ class because it won't really be more complicated than utility functions:
 
     #endif
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-onb]: <kbd>[onb.h]</kbd> Orthonormal basis class]
+[Listing [class-onb]: <kbd>[onb.h]</kbd> Orthonormal basis class]
 
 <div class='together'>
 We can rewrite our Lambertian material using this to get:
@@ -2219,7 +2819,7 @@ We can rewrite our Lambertian material using this to get:
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [scatter-onb]: <kbd>[material.h]</kbd> Scatter function, with orthonormal basis]
+[Listing [scatter-onb]: <kbd>[material.h]</kbd> Scatter function, with orthonormal basis]
 
 </div>
 
@@ -2268,7 +2868,7 @@ But first, let's quickly update the `isotropic` material:
         shared_ptr<texture> albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-isotropic-impsample]: <kbd>[material.h]</kbd>
+[Listing [class-isotropic-impsample]: <kbd>[material.h]</kbd>
     Isotropic material, modified for importance sampling]
 
 </div>
@@ -2383,7 +2983,7 @@ check that we got the math and concept right:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-lights]: <kbd>[camera.h]</kbd> Ray color with light sampling]
+[Listing [ray-color-lights]: <kbd>[camera.h]</kbd> Ray color with light sampling]
 
 <div class='together'>
 With 10 samples per pixel this yields:
@@ -2436,7 +3036,7 @@ that by letting the emitted member function of hittable take extra information:
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [emitted-directional]: <kbd>[material.h]</kbd> Material emission, directional]
+[Listing [emitted-directional]: <kbd>[material.h]</kbd> Material emission, directional]
 
 <div class='together'>
 This gives us:
@@ -2497,7 +3097,7 @@ works, and for `pdf` this implies:
 
     #endif
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-pdf]: <kbd>[pdf.h]</kbd> The abstract pdf class]
+[Listing [class-pdf]: <kbd>[pdf.h]</kbd> The abstract pdf class]
 
 </div>
 
@@ -2519,7 +3119,7 @@ create a uniform density over the unit sphere:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-uni-pdf]: <kbd>[pdf.h]</kbd> The uniform_pdf class]
+[Listing [class-uni-pdf]: <kbd>[pdf.h]</kbd> The uniform_pdf class]
 
 </div>
 
@@ -2544,7 +3144,7 @@ Next, let’s try a cosine density:
         onb uvw;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-cos-pdf]: <kbd>[pdf.h]</kbd> The cosine_pdf class]
+[Listing [class-cos-pdf]: <kbd>[pdf.h]</kbd> The cosine_pdf class]
 
 </div>
 
@@ -2595,7 +3195,7 @@ We can try this cosine PDF in the `ray_color()` function:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-cos-pdf]: <kbd>[camera.h]</kbd> The ray_color function, using cosine pdf]
+[Listing [ray-color-cos-pdf]: <kbd>[camera.h]</kbd> The ray_color function, using cosine pdf]
 
 </div>
 
@@ -2636,7 +3236,7 @@ Now we can try sampling directions toward a `hittable`, like the light.
         point3 origin;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-hittable-pdf]: <kbd>[pdf.h]</kbd> The hittable_pdf class]
+[Listing [class-hittable-pdf]: <kbd>[pdf.h]</kbd> The hittable_pdf class]
 
 If we want to sample the light, we will need `hittable` to answer some queries that it doesn’t yet
 have an interface for. The above code assumes the existence of two as-of-yet unimplemented functions
@@ -2663,7 +3263,7 @@ functions through to subclasses if you want a purely abstract `hittable` interfa
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [hittable-plus2]: <kbd>[hittable.h]</kbd> The hittable class, with two new methods]
+[Listing [hittable-plus2]: <kbd>[hittable.h]</kbd> The hittable class, with two new methods]
 
 <div class='together'>
 And then we change `quad` to implement those functions:
@@ -2720,7 +3320,7 @@ And then we change `quad` to implement those functions:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [quad-pdf]: <kbd>[quad.h]</kbd> quad with pdf]
+[Listing [quad-pdf]: <kbd>[quad.h]</kbd> quad with pdf]
 
 </div>
 
@@ -2797,7 +3397,7 @@ Add a `lights` parameter to the camera `render()` function:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-lights]: <kbd>[camera.h]</kbd> ray_color function with light PDF]
+[Listing [ray-color-lights]: <kbd>[camera.h]</kbd> ray_color function with light PDF]
 
 </div>
 
@@ -2831,7 +3431,7 @@ Create a light in the middle of the ceiling:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-hittable-pdf]: <kbd>[main.cc]</kbd> Adding a light to the Cornell box]
+[Listing [ray-color-hittable-pdf]: <kbd>[main.cc]</kbd> Adding a light to the Cornell box]
 
 </div>
 
@@ -2919,7 +3519,7 @@ direction. The mixture density class is actually pretty straightforward:
         shared_ptr<pdf> p[2];
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [class-mixturep-df]: <kbd>[pdf.h]</kbd> The mixture_pdf class]
+[Listing [class-mixturep-df]: <kbd>[pdf.h]</kbd> The mixture_pdf class]
 
 </div>
 
@@ -2957,7 +3557,7 @@ plug it into `ray_color()`:
             return color_from_emission + color_from_scatter;
         }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> The ray_color function, using mixture PDF]
+[Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> The ray_color function, using mixture PDF]
 
 </div>
 
@@ -3073,7 +3673,7 @@ We can redesign `material` and stuff all the new arguments into a class like we 
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [material-refactor]: <kbd>[material.h]</kbd> Refactoring the material class]
+[Listing [material-refactor]: <kbd>[material.h]</kbd> Refactoring the material class]
 
 </div>
 
@@ -3105,7 +3705,7 @@ The `lambertian` material becomes simpler:
         shared_ptr<texture> albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [lambertian-scatter]: <kbd>[material.h]</kbd> New lambertian scatter() method]
+[Listing [lambertian-scatter]: <kbd>[material.h]</kbd> New lambertian scatter() method]
 
 </div>
 
@@ -3138,7 +3738,7 @@ As does the `isotropic` material:
         shared_ptr<texture> albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [isotropic-scatter]: <kbd>[material.h]</kbd> New isotropic scatter() method]
+[Listing [isotropic-scatter]: <kbd>[material.h]</kbd> New isotropic scatter() method]
 
 </div>
 
@@ -3194,7 +3794,7 @@ And `ray_color()` changes are small:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> The ray_color function, using mixture PDF]
+[Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> The ray_color function, using mixture PDF]
 
 </div>
 
@@ -3265,7 +3865,7 @@ and dielectric materials are easy to fix.
       ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [material-scatter]: <kbd>[material.h]</kbd> The metal and dielectric scatter methods]
+[Listing [material-scatter]: <kbd>[material.h]</kbd> The metal and dielectric scatter methods]
 
 Note that if the fuzziness is nonzero, this surface isn’t really ideally specular, but the implicit
 sampling works just like it did before. We're effectively skipping all of our PDF work for the
@@ -3300,7 +3900,7 @@ materials that we're treating specularly.
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [ray-color-implicit]: <kbd>[camera.h]</kbd>
+[Listing [ray-color-implicit]: <kbd>[camera.h]</kbd>
     Ray color function with implicitly-sampled rays]
 
 </div>
@@ -3339,7 +3939,7 @@ that.
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [scene-cornell-al]: <kbd>[main.cc]</kbd> Cornell box scene with aluminum material]
+[Listing [scene-cornell-al]: <kbd>[main.cc]</kbd> Cornell box scene with aluminum material]
 
 <div class='together'>
 The resulting image has a noisy reflection on the ceiling because the directions toward the box are
@@ -3471,7 +4071,7 @@ The sphere class needs the two PDF-related functions:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [sphere-pdf]: <kbd>[sphere.h]</kbd> Sphere with PDF]
+[Listing [sphere-pdf]: <kbd>[sphere.h]</kbd> Sphere with PDF]
 
 <div class='together'>
 We can first try just sampling the sphere rather than the light:
@@ -3504,7 +4104,7 @@ We can first try just sampling the sphere rather than the light:
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [sampling-sphere]: <kbd>[main.cc]</kbd> Sampling just the sphere]
+[Listing [sampling-sphere]: <kbd>[main.cc]</kbd> Sampling just the sphere]
 
 </div>
 
@@ -3552,7 +4152,7 @@ think both tactics would work fine, but I will go with instrumenting `hittable_l
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [density-mixture]: <kbd>[hittable_list.h]</kbd> Creating a mixture of densities]
+[Listing [density-mixture]: <kbd>[hittable_list.h]</kbd> Creating a mixture of densities]
 
 <div class='together'>
 We assemble a list to pass to `render()` from `main()`:
@@ -3572,7 +4172,7 @@ We assemble a list to pass to `render()` from `main()`:
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [scene-density-mixture]: <kbd>[main.cc]</kbd> Updating the scene]
+[Listing [scene-density-mixture]: <kbd>[main.cc]</kbd> Updating the scene]
 
 </div>
 
@@ -3633,7 +4233,7 @@ always remember for `NaN`s is that a `NaN` does not equal itself. Using this tri
             << int(256 * intensity.clamp(b)) << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    [Listing [write-color-nan]: <kbd>[color.h]</kbd> NaN-tolerant write_color function]
+[Listing [write-color-nan]: <kbd>[color.h]</kbd> NaN-tolerant write_color function]
 
 </div>
 

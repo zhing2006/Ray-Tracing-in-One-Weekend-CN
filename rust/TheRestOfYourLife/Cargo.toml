@@ -1,0 +1,28 @@
+[package]
+name = "the_rest_of_your_life"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "pi"
+path = "src/bin/pi.rs"
+test = false
+
+[[bin]]
+name = "integrate_x_sq"
+path = "src/bin/integrate_x_sq.rs"
+test = false
+
+[[bin]]
+name = "estimate_halfway"
+path = "src/bin/estimate_halfway.rs"
+test = false
+
+[[bin]]
+name = "sphere_importance"
+path = "src/bin/sphere_importance.rs"
+test = false
+
+[dependencies]
+rand = "0"
+stb_image = "0.2"

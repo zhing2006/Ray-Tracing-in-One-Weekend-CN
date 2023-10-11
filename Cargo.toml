@@ -3,5 +3,6 @@
 members = [
     "rust/InOneWeekend",
     "rust/TheNextWeek",
+    "rust/TheRestOfYourLife"
 ]
 resolver = "2"
