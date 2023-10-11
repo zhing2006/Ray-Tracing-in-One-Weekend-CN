@@ -16,6 +16,7 @@ pub mod perlin;
 pub mod quad;
 pub mod constant_medium;
 pub mod onb;
+pub mod pdf;
 
 use std::rc::Rc;
 
@@ -116,7 +117,7 @@ fn cornell_box() {
 
   cam.aspect_ratio = 1.0;
   cam.image_width = 400;
-  cam.samples_per_pixel = 10;
+  cam.samples_per_pixel = 50;
   cam.max_depth = 10;
   cam.background = Color::default();
 

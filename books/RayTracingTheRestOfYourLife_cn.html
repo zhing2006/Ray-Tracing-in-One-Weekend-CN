@@ -3324,6 +3324,20 @@ PDF类
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-pdf]: <kbd>[pdf.h]</kbd> 抽象的pdf类]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use super::vec3::Vec3;
+
+    pub trait Pdf {
+        fn value(&self, direction: Vec3) -> f64;
+        fn generate(&self) -> Vec3;
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 </div>
 
 <div class='together'>
@@ -3344,6 +3358,25 @@ PDF类
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-uni-pdf]: <kbd>[pdf.h]</kbd> 均匀分布的uniform_pdf类]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub struct SpherePdf;
+
+    impl Pdf for SpherePdf {
+        fn value(&self, _direction: Vec3) -> f64 {
+            1.0 / (4.0 * rtweekend::PI)
+        }
+
+        fn generate(&self) -> Vec3 {
+            vec3::random_unit_vector()
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -3369,6 +3402,36 @@ PDF类
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-cos-pdf]: <kbd>[pdf.h]</kbd> 余弦分布的cosine_pdf类]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub struct CosinePdf {
+        uvw: Onb,
+    }
+
+    impl CosinePdf {
+        pub fn new(w: Vec3) -> Self {
+            Self {
+                uvw: Onb::new_from_w(w),
+            }
+        }
+    }
+
+    impl Pdf for CosinePdf {
+        fn value(&self, direction: Vec3) -> f64 {
+            let cosine_theta = vec3::dot(vec3::unit_vector(direction), self.uvw.w());
+            0.0_f64.max(cosine_theta / rtweekend::PI)
+        }
+
+        fn generate(&self) -> Vec3 {
+            self.uvw.local_v(vec3::random_cosine_direction())
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -3420,6 +3483,48 @@ PDF类
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [ray-color-cos-pdf]: <kbd>[camera.h]</kbd> ray_color函数，使用余弦pdf]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+        ...
+        fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable) -> Color {
+            ...
+
+            if let Some(mat) = rec.mat.clone() {
+                let mut scattered = Ray::default();
+                let mut attenuation = Color::default();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let mut pdf = 0.0;
+                let color_from_emission = mat.emitted(r, &rec, rec.u, rec.v, rec.p);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+                if !mat.scatter(r, &rec, &mut attenuation, &mut scattered, &mut pdf) {
+                    return color_from_emission;
+                }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let surface_pdf = CosinePdf::new(rec.normal);
+                scattered = Ray::new_with_time(rec.p, surface_pdf.generate(), r.time());
+                pdf = surface_pdf.value(scattered.direction());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let color_from_scatter = (attenuation * scattering_pdf * self.ray_color(&scattered,  depth - 1, world)) / pdf;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                color_from_emission + color_from_scatter
+            } else {
+              Color::default()
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 

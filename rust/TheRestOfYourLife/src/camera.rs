@@ -4,6 +4,10 @@ use super::hittable::{HitRecord, Hittable};
 use super::ray::Ray;
 use super::interval::Interval;
 use super::vec3::{self, Point3, Vec3};
+use super::pdf::{
+  Pdf,
+  CosinePdf,
+};
 
 pub struct Camera {
   pub aspect_ratio: f64,  // Ratio of image width over height
@@ -176,23 +180,9 @@ impl Camera {
         return color_from_emission;
       }
 
-      let on_light = Point3::new(rtweekend::random_double_range(213.0, 343.0), 554.0, rtweekend::random_double_range(227.0, 332.0));
-      let to_light = on_light - rec.p;
-      let distance_squared = to_light.length_squared();
-      let to_light = vec3::unit_vector(to_light);
-
-      if vec3::dot(to_light, rec.normal) < 0.0 {
-        return color_from_emission;
-      }
-
-      let light_area = (343.0 - 213.0) * (332.0 - 227.0);
-      let light_cosine = to_light.y().abs();
-      if light_cosine < 0.000001 {
-        return color_from_emission;
-      }
-
-      pdf = distance_squared / (light_cosine * light_area);
-      scattered = Ray::new_with_time(rec.p, to_light, r.time());
+      let surface_pdf = CosinePdf::new(rec.normal);
+      scattered = Ray::new_with_time(rec.p, surface_pdf.generate(), r.time());
+      pdf = surface_pdf.value(scattered.direction());
 
       let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
 

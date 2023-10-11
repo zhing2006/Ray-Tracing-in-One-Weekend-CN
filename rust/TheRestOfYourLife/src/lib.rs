@@ -16,3 +16,4 @@ pub mod perlin;
 pub mod quad;
 pub mod constant_medium;
 pub mod onb;
+pub mod pdf;
