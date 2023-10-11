@@ -2400,81 +2400,71 @@ Rust实现
 
 
 
-Generating Random Directions
+生成随机方向
 ====================================================================================================
-In this and the next two chapters, we'll harden our understanding and our tools.
+在本章和下两章中，我们将加深对蒙特卡洛方法的理解和工具的使用。
 
-
-Random Directions Relative to the Z Axis
+相对于Z轴的随机方向
 -----------------------------------------
-Let’s first figure out how to generate random directions. We already have a method to generate
-random directions using the rejection method, so let's create one using the inversion method. To
-simplify things, assume the $z$ axis is the surface normal, and $\theta$ is the angle from the
-normal. We'll set everything up in terms of the $z$ axis this chapter. Next chapter we’ll get them
-oriented to the surface normal vector. We will only deal with distributions that are rotationally
-symmetric about $z$. So $p(\omega) = f(\theta)$.
+首先，让我们弄清楚如何生成随机方向。我们已经有了使用拒绝方法生成随机方向的方法，所以让我们使用反演方法创建一个方法。
+为了简化问题，假设$z$轴是表面法线，$\theta$是与法线的角度。本章我们将以$z$轴为基准进行设置，下一章我们将把其转换为表面法线向量。
+我们只处理关于$z$轴旋转对称的分布。因此，$p(\omega) = f(\theta)$。
 
-Given a directional PDF on the sphere (where $p(\omega) = f(\theta)$), the one dimensional PDFs on
-$\theta$ and $\phi$ are:
+给定一个在球面上的方向概率密度函数（其中$p(\omega) = f(\theta)$），$\theta$和$\phi$的一维概率密度函数为：
 
     $$ a(\phi) = \frac{1}{2\pi} $$
     $$ b(\theta) = 2\pi f(\theta)\sin(\theta) $$
 
-For uniform random numbers $r_1$ and $r_2$, we solve for the CDF of $\theta$ and $\phi$ so that we
-can invert the CDF to derive the random number generator.
+对于均匀分布的随机数$r_1$和$r_2$，我们求解$\theta$和$\phi$的累积分布函数（CDF），以便可以反演CDF来得到随机数生成器。
 
     $$ r_1 = \int_{0}^{\phi} a(\phi') d\phi' $$
     $$ = \int_{0}^{\phi} \frac{1}{2\pi} d\phi' $$
     $$ = \frac{\phi}{2\pi} $$
 
-Invert to solve for $\phi$:
+反演求解$\phi$：
 
     $$ \phi = 2 \pi \cdot r_1 $$
 
-This should match with your intuition. To solve for a random $\phi$ you can take a uniform random
-number in the interval [0,1] and multiply by $2\pi$ to cover the full range of all possible $\phi$
-values, which is just [0,$2\pi$]. You may not have a fully formed intuition for how to solve for a
-random value of $\theta$, so let's walk through the math to help you get set up. We rewrite $\phi$
-as $\phi'$ and $\theta$ as $\theta'$ just like before, as a formality. For $\theta$ we have:
+这应该符合你的直觉。要生成一个随机的$\phi$值，你可以在区间[0,1]内取一个均匀随机数，并乘以$2\pi$以覆盖所有可能的$\phi$值范围，即[0，$2\pi$]。
+对于随机的$\theta$值，你可能没有完全形成直觉，所以让我们通过数学推导来帮助你进行设置。我们像之前一样将$\phi$表示为$\phi'$，将$\theta$表示为$\theta'$。
+对于$\theta$，我们有：
 
     $$ r_2 = \int_{0}^{\theta} b(\theta') d\theta' $$
     $$ = \int_{0}^{\theta} 2 \pi f(\theta') \sin(\theta') d\theta' $$
 
-Let’s try some different functions for $f()$. Let’s first try a uniform density on the sphere. The
-area of the unit sphere is $4\pi$, so a uniform $p(\omega) = \frac{1}{4\pi}$ on the unit sphere.
+让我们尝试一些不同的$f()$函数。首先，让我们尝试在球面上均匀分布的情况。单位球的面积是$4\pi$，所以在单位球上的均匀分布$p(\omega) = \frac{1}{4\pi}$。
 
     $$ r_2 = \int_{0}^{\theta} 2 \pi \frac{1}{4\pi} \sin(\theta') d\theta' $$
     $$ = \int_{0}^{\theta} \frac{1}{2} \sin(\theta') d\theta' $$
     $$ = \frac{-\cos(\theta)}{2} - \frac{-\cos(0)}{2} $$
     $$ = \frac{1 - \cos(\theta)}{2} $$
 
-Solving for $\cos(\theta)$ gives:
+求解$\cos(\theta)$：
 
     $$ \cos(\theta) = 1 - 2 r_2 $$
 
-We don’t solve for theta because we probably only need to know $\cos(\theta)$ anyway, and don’t want
-needless $\arccos()$ calls running around.
+我们不求解$\theta$，因为我们可能只需要知道$\cos(\theta)$，而不想要不必要的$\arccos()$调用。
 
-To generate a unit vector direction toward $(\theta,\phi)$ we convert to Cartesian coordinates:
+为了生成指向$(\theta,\phi)$的单位向量方向，我们将其转换为笛卡尔坐标：
 
     $$ x = \cos(\phi) \cdot \sin(\theta) $$
     $$ y = \sin(\phi) \cdot \sin(\theta) $$
     $$ z = \cos(\theta) $$
 
-And using the identity $\cos^2 + \sin^2 = 1$, we get the following in terms of random $(r_1,r_2)$:
+利用恒等式$\cos^2 + \sin^2 = 1$，我们得到以下关系（以随机数$(r_1,r_2)$表示）：
 
     $$ x = \cos(2\pi \cdot r_1)\sqrt{1 - (1-2 r_2)^2} $$
     $$ y = \sin(2\pi \cdot r_1)\sqrt{1 - (1-2 r_2)^2} $$
     $$ z = 1 - 2  r_2 $$
 
-Simplifying a little, $(1 - 2 r_2)^2 = 1 - 4r_2 + 4r_2^2$, so:
+稍微简化一下，$(1 - 2 r_2)^2 = 1 - 4r_2 + 4r_2^2$，所以：
 
     $$ x = \cos(2 \pi r_1) \cdot 2 \sqrt{r_2(1 - r_2)} $$
     $$ y = \sin(2 \pi r_1) \cdot 2 \sqrt{r_2(1 - r_2)} $$
     $$ z = 1 - 2 r_2 $$
 
 <div class='together'>
-We can output some of these:
+我们可以输出其中一些结果：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #include "rtweekend.h"
@@ -2493,44 +2483,41 @@ We can output some of these:
         }
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [rand-unit-sphere-plot]: <kbd>[sphere_plot.cc]</kbd> Random points on the unit sphere]
+[Listing [rand-unit-sphere-plot]: <kbd>[sphere_plot.cc]</kbd> 在单位球上生成随机点]
 
 </div>
 
 <div class='together'>
-And plot them for free on plot.ly (a great site with 3D scatterplot support):
+并在plot.ly上免费绘制它们（一个支持3D散点图的优秀网站）：
 
-  ![Figure [rand-pts-sphere]: Random points on the unit sphere
+  ![Figure [rand-pts-sphere]: 在单位球上的随机点
   ](../images/fig-3.10-rand-pts-sphere.jpg)
 
-On the plot.ly website you can rotate that around and see that it appears uniform.
+在plot.ly网站上，你可以旋转它并观察到它看起来是均匀分布的。
 
 </div>
 
 
-Uniform Sampling a Hemisphere
+均匀采样半球
 ------------------------------
-Now let’s derive uniform on the hemisphere. The density being uniform on the hemisphere means
-$p(\omega) = f(\theta) = \frac{1}{2\pi}$. Just changing the constant in the theta equations yields:
+现在让我们推导均匀分布在半球上的情况。在半球上的密度均匀意味着$p(\omega) = f(\theta) = \frac{1}{2\pi}$。只需更改$\theta$方程中的常数即可：
 
     $$ r_2 = \int_{0}^{\theta} b(\theta') d\theta' $$
     $$ = \int_{0}^{\theta} 2 \pi f(\theta') \sin(\theta') d\theta' $$
     $$ = \int_{0}^{\theta} 2 \pi \frac{1}{2\pi} \sin(\theta') d\theta' $$
     $$ \ldots $$
-    $$ \cos(\theta) = 1 - r_2 $$
+    $$ \cos(\theta) = 1 - \cos^2(\theta) $$
 
-This means that $\cos(\theta)$ will vary from 1 to 0, so $\theta$ will vary from 0 to $\pi/2$, which
-means that nothing will go below the horizon. Rather than plot it, we'll solve for a 2D integral
-with a known solution. Let’s integrate cosine cubed over the hemisphere (just picking something
-arbitrary with a known solution). First we'll solve the integral by hand:
+这意味着$\cos(\theta)$的取值范围是从1到0，因此$\theta$的取值范围是从0到$\pi/2$，这意味着没有方向会低于地平线。
+我们不再绘制它，而是求解具有已知解的二维积分。让我们对半球上的$\cos^3(\theta)$进行积分（只是选择一个具有已知解的任意函数）。
+首先，我们将手动求解积分：
 
     $$ \int_\omega \cos^3(\theta) dA $$
     $$ = \int_{0}^{2 \pi} \int_{0}^{\pi /2} \cos^3(\theta) \sin(\theta) d\theta d\phi $$
     $$ = 2 \pi \int_{0}^{\pi/2} \cos^3(\theta) \sin(\theta) d\theta = \frac{\pi}{2} $$
 
 <div class='together'>
-Now for integration with importance sampling. $p(\omega) = \frac{1}{2\pi}$, so we average
-$f()/p() = \cos^3(\theta) / \frac{1}{2\pi}$, and we can test this:
+现在我们来进行重要性采样的积分。$p(\omega) = \frac{1}{2\pi}$，所以我们平均$f()/p() = \cos^3(\theta) / \frac{1}{2\pi}$，我们可以测试一下：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #include "rtweekend.h"
@@ -2565,33 +2552,34 @@ $f()/p() = \cos^3(\theta) / \frac{1}{2\pi}$, and we can test this:
         std::cout << "Estimate = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [cos-cubed]: <kbd>[cos_cubed.cc]</kbd> Integration using $cos^3(x)$]
+[Listing [cos-cubed]: <kbd>[cos_cubed.cc]</kbd> 使用$cos^3(x)$进行积分]
 
 </div>
 
 
-Cosine Sampling a Hemisphere
+余弦采样半球
 ------------------------------
-We'll now continue trying to solve for cosine cubed over the horizon, but we'll change our PDF to
-generate directions with $p(\omega) =  f(\theta) = \cos(\theta) / \pi$.
+我们现在继续尝试解决余弦立方在地平线上的问题，但我们将把PDF更改为生成具有$p(\omega) =  f(\theta) = \cos(\theta) / \pi$的方向。
 
     $$ r_2 = \int_{0}^{\theta} b(\theta') d\theta' $$
     $$ = \int_{0}^{\theta} 2 \pi f(\theta') \sin(\theta') d\theta' $$
     $$ = \int_{0}^{\theta} 2 \pi \frac{\cos(\theta')}{\pi} \sin(\theta') d\theta' $$
     $$ = 1 - \cos^2(\theta) $$
 
-So,
+因此，
 
     $$ \cos(\theta) = \sqrt{1 - r_2} $$
 
-We can save a little algebra on specific cases by noting
+我们可以通过注意到
 
     $$ z = \cos(\theta) = \sqrt{1 - r_2} $$
     $$ x = \cos(\phi) \sin(\theta) = \cos(2 \pi r_1) \sqrt{1 - z^2} = \cos(2 \pi r_1) \sqrt{r_2} $$
     $$ y = \sin(\phi) \sin(\theta) = \sin(2 \pi r_1) \sqrt{1 - z^2} = \sin(2 \pi r_1) \sqrt{r_2} $$
 
+来节省一些代数计算。
+
 <div class='together'>
-Here's a function that generates random vectors weighted by this PDF:
+这是一个根据这个PDF加权生成随机向量的函数：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     inline vec3 random_cosine_direction() {
@@ -2607,7 +2595,7 @@ Here's a function that generates random vectors weighted by this PDF:
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [random-cosine-direction]: <kbd>[vec3.h]</kbd>
-    Random cosine direction utility function]
+    生成余弦分布方向的随机向量的实用函数]
 
 </div>
 
@@ -2641,77 +2629,57 @@ Here's a function that generates random vectors weighted by this PDF:
         std::cout << "Estimate = " << sum / N << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [cos-density]: <kbd>[cos_density.cc]</kbd> Integration with cosine density function]
+[Listing [cos-density]: <kbd>[cos_density.cc]</kbd> 使用余弦密度函数进行积分]
 
-We can generate other densities later as we need them. This `random_cosine_direction()` function
-produces a random direction weighted by $\cos(\theta)$ where $\theta$ is the angle from the $z$
-axis.
-
+我们可以在需要时生成其他密度函数。这个`random_cosine_direction()`函数生成一个按$\cos(\theta)$加权的随机方向，
+其中$\theta$是与$z$轴的角度。
 
 
-Orthonormal Bases
+
+正交规范基（Orthonormal Bases）
 ====================================================================================================
-In the last chapter we developed methods to generate random directions relative to the $z$ axis. If
-we want to be able to produce reflections off of any surface, we are going to need to make this more
-general: Not all normals are going to be perfectly aligned with the $z$ axis. So in this chapter we
-are going to generalize our methods so that they support arbitrary surface normal vectors.
+在上一章中，我们开发了一些方法来生成相对于$z$轴的随机方向。如果我们想要能够在任意表面上产生反射，我们需要将其更加普遍化：
+并非所有法线都与$z$轴完全对齐。因此，在本章中，我们将推广我们的方法，使其支持任意表面法线向量。
 
-
-Relative Coordinates
+相对坐标系
 ---------------------
-An _orthonormal basis_ (ONB) is a collection of three mutually orthogonal unit vectors. It is a
-strict subtype of coordinate system. The Cartesian $xyz$ axes are one example of an orthonormal
-basis. All of our renders are the result of the relative positions and orientations of the objects
-in a scene projected onto the image plane of the camera. The camera and objects must be described in
-the same coordinate system, so that the projection onto the image plane is logically defined,
-otherwise the camera has no definitive means of correctly rendering the objects. Either the camera
-must be redefined in the objects' coordinate system, or the objects must be redefined in the
-camera's coordinate system. It's best to start with both in the same coordinate system, so no
-redefinition is necessary. So long as the camera and scene are described in the same coordinate
-system, all is well. The orthonormal basis defines how distances and orientations are represented in
-the space, but an orthonormal basis alone is not enough. The objects and the camera need to
-described by their displacement from a mutually defined location. This is just the origin
-$\mathbf{O}$ of the scene; it represents the center of the universe for everything to displace from.
+正交规范基（ONB）是三个相互正交的单位向量的集合，是坐标系的严格子类型。笛卡尔坐标系的$xyz$轴就是正交规范基的一个例子。
+我们所有的渲染结果都是场景中对象的相对位置和方向在相机的图像平面上的投影的结果。相机和对象必须使用相同的坐标系描述，
+以便在图像平面上进行投影是有意义的，否则相机无法正确地渲染对象。要么将相机重新定义为对象的坐标系，要么将对象重新定义为相机的坐标系。
+最好是从相同的坐标系开始，这样就不需要重新定义。只要相机和场景在相同的坐标系中描述，一切都很好。正交规范基定义了空间中的距离和方向的表示方式，
+但仅有正交规范基是不够的。对象和相机需要通过它们相对于一个相互定义的位置的位移来描述。这个位置就是场景的原点$\mathbf{O}$；
+它代表了所有物体的宇宙中心。
 
-Suppose we have an origin $\mathbf{O}$ and Cartesian unit vectors $\mathbf{x}$, $\mathbf{y}$, and
-$\mathbf{z}$. When we say a location is (3,-2,7), we really are saying:
+假设我们有一个原点$\mathbf{O}$和笛卡尔单位向量$\mathbf{x}$、$\mathbf{y}$和$\mathbf{z}$。当我们说一个位置是(3,-2,7)时，
+我们实际上是在说：
 
-    $$ \text{Location is } \mathbf{O} + 3\mathbf{x} - 2\mathbf{y} + 7\mathbf{z} $$
+    $$ \text{位置是 } \mathbf{O} + 3\mathbf{x} - 2\mathbf{y} + 7\mathbf{z} $$
 
-If we want to measure coordinates in another coordinate system with origin $\mathbf{O}'$ and basis
-vectors $\mathbf{u}$, $\mathbf{v}$, and $\mathbf{w}$, we can just find the numbers $(u,v,w)$ such
-that:
+如果我们想要在另一个以原点$\mathbf{O}'$和基向量$\mathbf{u}$、$\mathbf{v}$和$\mathbf{w}$为坐标系中测量坐标，
+我们只需要找到数字$(u,v,w)$，使得：
 
-    $$ \text{Location is } \mathbf{O}' + u\mathbf{u} + v\mathbf{v} + w\mathbf{w} $$
+    $$ \text{位置是 } \mathbf{O}' + u\mathbf{u} + v\mathbf{v} + w\mathbf{w} $$
 
 
-Generating an Orthonormal Basis
+生成正交规范基
 --------------------------------
-If you take an intro to graphics course, there will be a lot of time spent on coordinate systems and
-4×4 coordinate transformation matrices. Pay attention, it’s really important stuff! But we won’t be
-needing it for this book and we'll make do without it. What we do need is to generate random
-directions with a set distribution relative to the surface normal vector $\mathbf{n}$. We won’t be
-needing an origin for this because a direction is relative and has no specific origin. To start off
-with, we need two cotangent vectors that are each perpendicular to $\mathbf{n}$ and that are also
-perpendicular to each other.
+如果你学习计算机图形学课程，会花很多时间讲解坐标系和4×4坐标变换矩阵。请注意，这是非常重要的内容！但是在本书中，我们不需要它，
+我们可以不用它。我们需要的是根据表面法线向量$\mathbf{n}$生成具有一定分布的随机方向。对于这个过程，我们不需要一个起点，
+因为方向是相对的，没有特定的起点。首先，我们需要两个余切向量，它们都垂直于$\mathbf{n}$，并且彼此也垂直。
 
-Some 3D object models will come with one or more cotangent vectors for each vertex. If our model has
-only one cotangent vector, then the process of making an ONB is a nontrivial one. Suppose we have
-any vector $\mathbf{a}$ that is of nonzero length and nonparallel with $\mathbf{n}$. We can get
-vectors $\mathbf{s}$ and $\mathbf{t}$ perpendicular to $\mathbf{n}$ by using the property of the
-cross product that $\mathbf{n} \times \mathbf{a}$ is perpendicular to both $\mathbf{n}$ and
-$\mathbf{a}$:
+一些3D对象模型会为每个顶点提供一个或多个余切向量。如果我们的模型只有一个余切向量，那么生成正交规范基的过程就不是一件简单的事情。
+假设我们有任意一个非零长度且与$\mathbf{n}$不平行的向量$\mathbf{a}$。我们可以通过使用叉乘的性质$\mathbf{n} \times \mathbf{a}$
+垂直于$\mathbf{n}$和$\mathbf{a}$来得到垂直于$\mathbf{n}$的向量$\mathbf{s}$和$\mathbf{t}$：
 
     $$ \mathbf{s} = \operatorname{unit_vector}(\mathbf{n} \times \mathbf{a}) $$
 
     $$ \mathbf{t} = \mathbf{n} \times \mathbf{s} $$
 
 <div class='together'>
-This is all well and good, but the catch is that we may not be given an $\mathbf{a}$ when we load a
-model, and our current program doesn't have a way to generate one. If we went ahead and picked an
-arbitrary $\mathbf{a}$ to use as an initial vector we may get an $\mathbf{a}$ that is parallel to
-$\mathbf{n}$. So a common method is to pick an arbitrary axis and check to see if it's parallel to
-$\mathbf{n}$ (which we assume to be of unit length), if it is, just use another axis:
+这一切都很好，但问题是当我们加载模型时，可能不会给我们一个$\mathbf{a}$，而且我们当前的程序也没有生成一个的方法。
+如果我们继续选择一个任意的$\mathbf{a}$作为初始向量，可能会得到一个与$\mathbf{n}$平行的$\mathbf{a}$。
+因此，一种常见的方法是选择一个任意的轴，并检查它是否与$\mathbf{n}$平行（我们假设$\mathbf{n}$的长度为1），
+如果是，则选择另一个轴：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     if (fabs(n.x()) > 0.9)
@@ -2723,7 +2691,7 @@ $\mathbf{n}$ (which we assume to be of unit length), if it is, just use another 
 </div>
 
 <div class='together'>
-We then take the cross product to get $\mathbf{s}$ and $\mathbf{t}$
+然后我们进行叉乘得到$\mathbf{s}$和$\mathbf{t}$
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     vec3 s = unit_vector(cross(n, a));
@@ -2732,21 +2700,18 @@ We then take the cross product to get $\mathbf{s}$ and $\mathbf{t}$
 
 </div>
 
-Note that we don't need to take the unit vector for $\mathbf{t}$. Since $\mathbf{n}$ and
-$\mathbf{s}$ are both unit vectors, their cross product $\mathbf{t}$ will be also. Once we have an
-ONB of $\mathbf{s}$, $\mathbf{t}$, and $\mathbf{n}$, and we have a random $(x,y,z)$ relative to the
-$z$ axis, we can get the vector relative to $\mathbf{n}$ with:
+注意，我们不需要对$\mathbf{t}$进行单位化。由于$\mathbf{n}$和$\mathbf{s}$都是单位向量，它们的叉乘$\mathbf{t}$也将是单位向量。
+一旦我们有了$\mathbf{s}$、$\mathbf{t}$和$\mathbf{n}$的正交规范基，并且我们有一个相对于$z$轴的随机$(x,y,z)$，
+我们可以通过以下方式得到相对于$\mathbf{n}$的向量：
 
-    $$ \mathit{Random vector} = x \mathbf{s} + y \mathbf{t} + z \mathbf{n} $$
+    $$ \text{随机向量} = x \mathbf{s} + y \mathbf{t} + z \mathbf{n} $$
 
-If you remember, we used similar math to produce rays from a camera. You can think of that as a
-change to the camera’s natural coordinate system.
+如果你还记得，我们在相机中使用了类似的数学方法来产生光线。你可以将其看作是对相机的自然坐标系的改变。
 
 
-The ONB Class
+ONB类
 --------------
-Should we make a class for ONBs, or are utility functions enough? I’m not sure, but let’s make a
-class because it won't really be more complicated than utility functions:
+我们是否应该为ONB创建一个类，还是仅使用实用函数就足够了？我不确定，但让我们创建一个类，因为它实际上并不比实用函数更复杂：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #ifndef ONB_H
@@ -2790,10 +2755,10 @@ class because it won't really be more complicated than utility functions:
 
     #endif
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [class-onb]: <kbd>[onb.h]</kbd> Orthonormal basis class]
+[Listing [class-onb]: <kbd>[onb.h]</kbd> 正交基类]
 
 <div class='together'>
-We can rewrite our Lambertian material using this to get:
+我们可以使用这个类来重写我们的Lambertian材质：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class lambertian : public material {
@@ -2819,22 +2784,22 @@ We can rewrite our Lambertian material using this to get:
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [scatter-onb]: <kbd>[material.h]</kbd> Scatter function, with orthonormal basis]
+[Listing [scatter-onb]: <kbd>[material.h]</kbd> Scatter函数，使用正交基]
 
 </div>
 
 <div class='together'>
-Which produces:
+这将产生以下结果：
 
-  ![<span class='num'>Image 6:</span> Cornell box, with orthonormal basis scatter function
+  ![<span class='num'>图像 6：</span> Cornell 盒子，使用正交基 scatter 函数
   ](../images/img-3.06-cornell-ortho.jpg class='pixel')
 
 </div>
 
 <div class='together'>
-Let’s get rid of some of that noise.
+让我们消除一些噪音。
 
-But first, let's quickly update the `isotropic` material:
+但首先，让我们快速更新`isotropic`材质：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class isotropic : public material {
@@ -2869,63 +2834,53 @@ But first, let's quickly update the `isotropic` material:
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-isotropic-impsample]: <kbd>[material.h]</kbd>
-    Isotropic material, modified for importance sampling]
+    各向同性材质，用于重要性采样的修改]
 
 </div>
 
 
 
-Sampling Lights Directly
+直接采样光源
 ====================================================================================================
-The problem with sampling uniformly over all directions is that lights are no more likely to be
-sampled than any arbirary or unimportant direction. We could use shadow rays to solve for the direct
-lighting at any given point. Instead, I’ll just use a PDF that sends more rays to the light. We can
-then turn around and change that PDF to send more rays in whatever direction we want.
+在所有方向上均匀采样的问题在于，光源被采样的概率与任意或不重要的方向相同。我们可以使用阴影射线来解决任意给定点的直接光照问题。
+相反，我将使用一个PDF来发送更多的射线到光源。然后，我们可以改变该PDF，以便在任何方向上发送更多的射线。
 
-It’s really easy to pick a random direction toward the light; just pick a random point on the light
-and send a ray in that direction. But we'll need to know the PDF, $p(\omega)$, so that we're not
-biasing our render. But what is that?
+选择一个指向光源的随机方向非常简单；只需在光源上选择一个随机点，并向该方向发送一条射线。但我们需要知道PDF，即$p(\omega)$，
+以确保我们的渲染不会产生偏差。但这个PDF是什么呢？
 
-
-Getting the PDF of a Light
+获取光源的PDF
 ---------------------------
-For a light with a surface area of $A$, if we sample uniformly on that light, the PDF on the surface
-is just $\frac{1}{A}$. How much area does the entire surface of the light take up if its projected
-back onto the unit sphere? Fortunately, there is a simple correspondence, as outlined in this
-diagram:
+对于一个表面积为$A$的光源，如果我们在光源上均匀采样，表面上的PDF就是$\frac{1}{A}$。如果将光源的整个表面投影到单位球上，
+整个表面在单位球上占据了多大的面积？幸运的是，有一个简单的对应关系，如下图所示：
 
-  ![Figure [shape-onto-pdf]: Projection of light shape onto PDF
-  ](../images/fig-3.11-shape-onto-pdf.jpg)
+  ![图 [shape-onto-pdf]：光源形状投影到PDF上](../images/fig-3.11-shape-onto-pdf.jpg)
 
-If we look at a small area $dA$ on the light, the probability of sampling it is
-$\operatorname{p_q}(q) \cdot dA$. On the sphere, the probability of sampling the small area
-$d\omega$ on the sphere is $\operatorname{p}(\omega) \cdot d\omega$. There is a geometric
-relationship between $d\omega$ and $dA$:
+如果我们在光源上观察一个小面积$dA$，采样它的概率是$\operatorname{p_q}(q) \cdot dA$。在球上，采样小面积$d\omega$的概率是
+$\operatorname{p}(\omega) \cdot d\omega$。$d\omega$和$dA$之间存在几何关系：
 
     $$ d\omega = \frac{dA \cdot \cos(\theta)}{\operatorname{distance}^2(p,q)} $$
 
-Since the probability of sampling $d\omega$ and $dA$ must be the same, then
+由于采样$d\omega$和$dA$的概率必须相同，因此
 
     $$ \operatorname{p}(\omega) \cdot d\omega = \operatorname{p_q}(q) \cdot dA $$
     $$ \operatorname{p}(\omega)
        \cdot \frac{dA \cdot \cos(\theta)}{\operatorname{distance}^2(p,q)}
        = \operatorname{p_q}(q) \cdot dA $$
 
-We know that if we sample uniformly on the light the PDF on the surface is $\frac{1}{A}$:
+我们知道，如果在光源上均匀采样，表面上的PDF是$\frac{1}{A}$：
 
     $$ \operatorname{p_q}(q) = \frac{1}{A} $$
     $$ \operatorname{p}(\omega) \cdot \frac{dA \cdot \cos(\theta)}{\operatorname{distance}^2(p,q)}
        =  \frac{dA}{A} $$
 
-So
+因此
 
-  $$ \operatorname{p}(\omega) = \frac{\operatorname{distance}^2(p,q)}{\cos(\theta) \cdot A} $$
+    $$ \operatorname{p}(\omega) = \frac{\operatorname{distance}^2(p,q)}{\cos(\theta) \cdot A} $$
 
 
-Light Sampling
+光源采样
 ---------------
-We can hack our `ray_color()` function to sample the light in a very hard-coded fashion just to
-check that we got the math and concept right:
+我们可以在`ray_color()`函数中以非常硬编码的方式对光源进行采样，以检查我们是否正确理解了数学和概念：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -2934,11 +2889,11 @@ check that we got the math and concept right:
         color ray_color(const ray& r, int depth, const hittable& world) const {
             hit_record rec;
 
-            // If we've exceeded the ray bounce limit, no more light is gathered.
+            // 如果超过了射线反射次数的限制，不再收集光线。
             if (depth <= 0)
                 return color(0,0,0);
 
-            // If the ray hits nothing, return the background color.
+            // 如果射线没有击中任何物体，返回背景颜色。
             if (!world.hit(r, interval(0.001, infinity), rec))
                 return background;
 
@@ -2983,25 +2938,22 @@ check that we got the math and concept right:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-lights]: <kbd>[camera.h]</kbd> Ray color with light sampling]
+[Listing [ray-color-lights]: <kbd>[camera.h]</kbd> 光源采样的射线颜色]
 
 <div class='together'>
-With 10 samples per pixel this yields:
+使用每个像素10个样本，得到的结果如下：
 
-  ![<span class='num'>Image 7:</span> Cornell box, sampling only the light, 10 samples per pixel
-  ](../images/img-3.07-cornell-sample-light.jpg class='pixel')
+  ![<span class='num'>图像 7：</span> Cornell 盒子，仅采样光源，每个像素10个样本](../images/img-3.07-cornell-sample-light.jpg class='pixel')
 
-This is about what we would expect from something that samples only the light sources, so this
-appears to work.
+这大致符合我们只采样光源的预期，所以看起来这个方法是有效的。
 
 </div>
 
 
-Switching to Unidirectional Light
+切换到单向光源
 ----------------------------------
-The noisy pops around the light on the ceiling are because the light is two-sided and there is a
-small space between light and ceiling. We probably want to have the light just emit down. We can do
-that by letting the emitted member function of hittable take extra information:
+天花板上光源周围的噪点是因为光源是双面的，光源和天花板之间有一个小空间。我们可能希望光源只向下发射光线。
+我们可以通过让hittable的emitted成员函数接收额外的信息来实现：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class material {
@@ -3036,47 +2988,38 @@ that by letting the emitted member function of hittable take extra information:
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [emitted-directional]: <kbd>[material.h]</kbd> Material emission, directional]
+[Listing [emitted-directional]: <kbd>[material.h]</kbd> 材质发射光线，单向]
 
 <div class='together'>
-This gives us:
+这样我们就得到了：
 
-  ![<span class='num'>Image 8:</span> Cornell box, light emitted only in the downward direction
-  ](../images/img-3.08-cornell-lightdown.jpg class='pixel')
+  ![<span class='num'>图像 8：</span> Cornell 盒子，光源只向下发射光线](../images/img-3.08-cornell-lightdown.jpg class='pixel')
 
 </div>
 
 
 
-Mixture Densities
+混合密度
 ====================================================================================================
-We have used a PDF related to $\cos(\theta)$, and a PDF related to sampling the light. We would like
-a PDF that combines these.
+我们已经使用了与$\cos(\theta)$相关的概率密度函数（PDF），以及与光线采样相关的PDF。我们希望有一个将它们结合起来的PDF。
 
-
-The PDF Class
+PDF类
 -------------
-We've worked with PDFs in quite a lot of code already. I think that now is a good time to figure out
-how we want to standardize our usage of PDFs. We already know that we are going to have a PDF for
-the surface and a PDF for the light, so let's create a `pdf` base class. So far, we've had a `pdf()`
-function that took a direction and returned the PDF's distribution value for that direction. This
-value has so far been one of $1/4\pi$, $1/2\pi$, and $\cos(\theta)/\pi$. In a couple of our examples
-we generated the random direction using a different distribution than the distribution of the PDF.
-We covered this quite a lot in the chapter Playing with Importance Sampling. In general, if we know
-the distribution of our random directions, we should use a PDF with the same distribution. This will
-lead to the fastest convergence. With that in mind, we'll create a `pdf` class that is responsible
-for generating random directions and determining the value of the PDF.
+我们已经在很多代码中使用了PDF。现在是一个很好的时机来确定我们如何规范使用PDF。
+我们已经知道我们将有一个用于表面的PDF和一个用于光线的PDF，所以让我们创建一个`pdf`基类。到目前为止，我们有一个`pdf()`函数，
+它接受一个方向并返回该方向上的PDF分布值。到目前为止，这个值一直是$1/4\pi$、$1/2\pi$和$\cos(\theta)/\pi$中的一个。
+在我们的一些示例中，我们使用了与PDF的分布不同的分布来生成随机方向。我们在章节Playing with Importance Sampling中详细讨论了这个问题。
+一般来说，如果我们知道随机方向的分布，我们应该使用具有相同分布的PDF。这将导致最快的收敛速度。基于这一点，我们将创建一个`pdf`类，
+负责生成随机方向并确定PDF的值。
 
-From all of this, any `pdf` class should be responsible for
+根据这一点，任何`pdf`类都应该负责：
 
-  1. returning a random direction weighted by the internal PDF distribution, and
-  2. returning the corresponding PDF distribution value in that direction.
+  1. 返回一个按照内部PDF分布加权的随机方向，以及
+  2. 返回该方向上的相应PDF分布值。
 
 <div class='together'>
-The details of how this is done under the hood varies for $\operatorname{pSurface}$ and
-$\operatorname{pLight}$, but that is exactly what class hierarchies were invented for! It’s never
-obvious what goes in an abstract class, so my approach is to be greedy and hope a minimal interface
-works, and for `pdf` this implies:
+这在$\operatorname{pSurface}$和$\operatorname{pLight}$中的具体实现方式有所不同，但这正是类层次结构的用途所在！
+抽象类中应该放什么并不明显，所以我的方法是贪心地希望最小的接口能够工作，对于`pdf`来说，这意味着：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     #ifndef PDF_H
@@ -3097,13 +3040,12 @@ works, and for `pdf` this implies:
 
     #endif
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [class-pdf]: <kbd>[pdf.h]</kbd> The abstract pdf class]
+[Listing [class-pdf]: <kbd>[pdf.h]</kbd> 抽象的pdf类]
 
 </div>
 
 <div class='together'>
-We’ll see if we need to add anything else to `pdf` by fleshing out the subclasses. First, we'll
-create a uniform density over the unit sphere:
+通过完善子类，我们将看到是否需要向`pdf`添加其他内容。首先，我们将创建一个在单位球上均匀分布的密度：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class sphere_pdf : public pdf {
@@ -3119,12 +3061,12 @@ create a uniform density over the unit sphere:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [class-uni-pdf]: <kbd>[pdf.h]</kbd> The uniform_pdf class]
+[Listing [class-uni-pdf]: <kbd>[pdf.h]</kbd> 均匀分布的uniform_pdf类]
 
 </div>
 
 <div class='together'>
-Next, let’s try a cosine density:
+接下来，让我们尝试一种余弦分布：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class cosine_pdf : public pdf {
@@ -3144,12 +3086,12 @@ Next, let’s try a cosine density:
         onb uvw;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [class-cos-pdf]: <kbd>[pdf.h]</kbd> The cosine_pdf class]
+[Listing [class-cos-pdf]: <kbd>[pdf.h]</kbd> 余弦分布的cosine_pdf类]
 
 </div>
 
 <div class='together'>
-We can try this cosine PDF in the `ray_color()` function:
+我们可以在`ray_color()`函数中尝试这个余弦PDF：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -3159,11 +3101,11 @@ We can try this cosine PDF in the `ray_color()` function:
         color ray_color(const ray& r, int depth, const hittable& world) const {
             hit_record rec;
 
-            // If we've exceeded the ray bounce limit, no more light is gathered.
+            // 如果超过了光线反射次数的限制，不再收集光线。
             if (depth <= 0)
                 return color(0,0,0);
 
-            // If the ray hits nothing, return the background color.
+            // 如果光线没有击中任何物体，返回背景颜色。
             if (!world.hit(r, interval(0.001, infinity), rec))
                 return background;
 
@@ -3195,23 +3137,21 @@ We can try this cosine PDF in the `ray_color()` function:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-cos-pdf]: <kbd>[camera.h]</kbd> The ray_color function, using cosine pdf]
+[Listing [ray-color-cos-pdf]: <kbd>[camera.h]</kbd> ray_color函数，使用余弦pdf]
 
 </div>
 
 <div class='together'>
-This yields an exactly matching result so all we’ve done so far is move some computation up into the
-`cosine_pdf` class:
+这将得到一个完全匹配的结果，所以到目前为止，我们只是将一些计算移到了`cosine_pdf`类中：
 
-  ![<span class='num'>Image 9:</span> Cornell box with a cosine density PDF
-  ](../images/img-3.09-cornell-cos-pdf.jpg class='pixel')
+  ![<span class='num'>图像 9：</span>带有余弦密度PDF的康奈尔盒子](../images/img-3.09-cornell-cos-pdf.jpg class='pixel')
 
 </div>
 
 
-Sampling Directions towards a Hittable
+朝可击中物体的方向进行采样
 ---------------------------------------
-Now we can try sampling directions toward a `hittable`, like the light.
+现在我们可以尝试朝着`hittable`（如光源）进行方向采样。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     ...
@@ -3236,15 +3176,13 @@ Now we can try sampling directions toward a `hittable`, like the light.
         point3 origin;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [class-hittable-pdf]: <kbd>[pdf.h]</kbd> The hittable_pdf class]
+[Listing [class-hittable-pdf]: <kbd>[pdf.h]</kbd> hittable_pdf 类]
 
-If we want to sample the light, we will need `hittable` to answer some queries that it doesn’t yet
-have an interface for. The above code assumes the existence of two as-of-yet unimplemented functions
-in the `hittable` class: `pdf_value()` and `random()`. We need to add these functions for the
-program to compile. We could go through all of the `hittable` subclasses and add these functions,
-but that would be a hassle, so we’ll just add two trivial functions to the `hittable` base class.
-This breaks our previously pure abstract implementation, but it saves work. Feel free to write these
-functions through to subclasses if you want a purely abstract `hittable` interface class.
+如果我们想要对光源进行采样，我们需要`hittable`来回答一些它尚未具备接口的查询。
+上面的代码假设`hittable`类中存在两个尚未实现的函数：`pdf_value()`和`random()`。
+我们需要添加这些函数以使程序能够编译。我们可以遍历所有的`hittable`子类并添加这些函数，但那样会很麻烦，
+所以我们只需在`hittable`基类中添加两个简单的函数。这会破坏我们之前的纯抽象实现，但可以节省工作量。
+如果你想要一个纯抽象的`hittable`接口类，可以将这些函数一直写到子类。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class hittable {
@@ -3263,10 +3201,10 @@ functions through to subclasses if you want a purely abstract `hittable` interfa
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [hittable-plus2]: <kbd>[hittable.h]</kbd> The hittable class, with two new methods]
+[Listing [hittable-plus2]: <kbd>[hittable.h]</kbd> hittable 类，带有两个新方法]
 
 <div class='together'>
-And then we change `quad` to implement those functions:
+然后我们修改`quad`来实现这些函数：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class quad : public hittable {
@@ -3320,17 +3258,15 @@ And then we change `quad` to implement those functions:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [quad-pdf]: <kbd>[quad.h]</kbd> quad with pdf]
+[Listing [quad-pdf]: <kbd>[quad.h]</kbd> 带有 PDF 的 quad]
 
 </div>
 
-We only need to add `pdf_value()` and `random()` to `quad` because we're using this to importance
-sample the light, and the only light we have in our scene is a `quad`. if you want other light
-geometries, or want to use a PDF with other objects, you'll need to implement the above functions
-for the corresponding classes.
+我们只需要在`quad`中添加`pdf_value()`和`random()`，因为我们使用它来重要性采样光源，而我们场景中唯一的光源就是一个`quad`。
+如果你想要其他光源几何体，或者想要在其他对象上使用 PDF，你需要为相应的类实现上述函数。
 
 <div class='together'>
-Add a `lights` parameter to the camera `render()` function:
+在相机的`render()`函数中添加一个`lights`参数：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -3397,12 +3333,12 @@ Add a `lights` parameter to the camera `render()` function:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-lights]: <kbd>[camera.h]</kbd> ray_color function with light PDF]
+[Listing [ray-color-lights]: <kbd>[camera.h]</kbd> ray_color 函数带有光源 PDF]
 
 </div>
 
 <div class='together'>
-Create a light in the middle of the ceiling:
+在天花板中央创建一个光源：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     int main() {
@@ -3431,70 +3367,62 @@ Create a light in the middle of the ceiling:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-hittable-pdf]: <kbd>[main.cc]</kbd> Adding a light to the Cornell box]
+[Listing [ray-color-hittable-pdf]: <kbd>[main.cc]</kbd> 向 Cornell 盒子添加光源]
 
 </div>
 
 <div class='together'>
-At 10 samples per pixel we get:
+使用每像素10个样本，我们得到：
 
-  ![<span class='num'>Image 10:</span> Cornell box, sampling a hittable light, 10 samples per pixel
+  ![<span class='num'>图像 10:</span> Cornell 盒子，对可击中光源进行采样，每像素10个样本
   ](../images/img-3.10-hittable-light.jpg class='pixel')
 
 </div>
 
 
-The Mixture PDF Class
+混合概率密度函数（Mixture PDF）类
 ----------------------
-As was briefly mentioned in the chapter Playing with Importance Sampling, we can create linear
-mixtures of any PDFs to form mixture densities that are also PDFs. Any weighted average of PDFs is
-also a PDF. As long as the weights are positive and add up to any one, we have a new PDF.
+在Playing with Importance Sampling一节中简要提到过，我们可以创建任意概率密度函数（PDF）的线性混合，
+形成也是PDF的混合密度。任意PDF的加权平均也是一个PDF。只要权重是正数且加起来等于1，我们就得到了一个新的PDF。
 
-  $$ \operatorname{pMixture}() = w_0 p_0() + w_1 p_1() + w_2 p_2() + \ldots + w_{n-1} p_{n-1}() $$
+  $ \operatorname{pMixture}() = w_0 p_0() + w_1 p_1() + w_2 p_2() + \ldots + w_{n-1} p_{n-1}() $
 
-  $$ 1 = w_0 + w_1 + w_2 + \ldots + w_{n-1} $$
+  $ 1 = w_0 + w_1 + w_2 + \ldots + w_{n-1} $
 
-For example, we could just average the two densities:
+例如，我们可以简单地对两个密度进行平均：
 
-  $$ \operatorname{pMixture}(\omega_o)
+  $ \operatorname{pMixture}(\omega_o)
      = \frac{1}{2} \operatorname{pSurface}(\omega_o) + \frac{1}{2} \operatorname{pLight}(\omega_o)
-  $$
+  $
 
 <div class='together'>
-How would we instrument our code to do that? There is a very important detail that makes this not
-quite as easy as one might expect. Generating the random direction for a mixture PDF is simple:
+我们如何在代码中实现这个过程呢？有一个非常重要的细节使得这并不像人们期望的那么简单。
+生成混合PDF的随机方向很简单：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     if (random_double() < 0.5)
-        pick direction according to pSurface
+        根据pSurface选择方向
     else
-        pick direction according to pLight
+        根据pLight选择方向
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 </div>
 
-But solving for the PDF value of $\operatorname{pMixture}$ is slightly more subtle. We can't just
+但是解决$\operatorname{pMixture}$的PDF值稍微有些微妙。我们不能简单地：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    if (direction is from pSurface)
-        get PDF value of pSurface
+    if (方向来自pSurface)
+        获取pSurface的PDF值
     else
-        get PDF value of pLight
+        获取pLight的PDF值
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-</div>
 
 <div class='together'>
-For one, figuring out which PDF the random direction came from is probably not trivial. We don't
-have any plumbing for `generate()` to tell `value()` what the original `random_double()` was, so we
-can't trivially say which PDF the random direction comes from. If we thought that the above was
-correct, we would have to solve backwards to figure which PDF the direction could come from. Which
-honestly sounds like a nightmare, but fortunately we don't need to do that. There are some
-directions that both PDFs could have generated. For example, a direction toward the light could have
-been generated by either $\operatorname{pLight}$ _or_ $\operatorname{pSurface}$. It is sufficient
-for us to solve for the pdf value of $\operatorname{pSurface}$ and of $\operatorname{pLight}$ for a
-random direction and then take the PDF mixture weights to solve for the total PDF value for that
-direction. The mixture density class is actually pretty straightforward:
+首先，弄清楚随机方向来自哪个PDF可能并不是一件简单的事情。我们没有任何方法让`generate()`告诉`value()`原始的`random_double()`是什么，
+所以我们无法简单地判断随机方向来自哪个PDF。如果我们认为上述代码是正确的，我们将不得不反向解决问题，找出方向可能来自哪个PDF。
+这听起来确实像一场噩梦，但幸运的是我们不需要这样做。有一些方向既可以由$\operatorname{pLight}$生成，也可以由$\operatorname{pSurface}$生成。
+我们只需要解决随机方向的$\operatorname{pSurface}$和$\operatorname{pLight}$的PDF值，然后使用PDF混合权重来计算该方向的总PDF值即可。
+混合密度类实际上非常简单：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class mixture_pdf : public pdf {
@@ -3519,13 +3447,12 @@ direction. The mixture density class is actually pretty straightforward:
         shared_ptr<pdf> p[2];
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [class-mixturep-df]: <kbd>[pdf.h]</kbd> The mixture_pdf class]
+[Listing [class-mixturep-df]: <kbd>[pdf.h]</kbd> mixture_pdf类]
 
 </div>
 
 <div class='together'>
-Now we would like to do a mixture density of the cosine sampling and of the light sampling. We can
-plug it into `ray_color()`:
+现在我们想要对余弦采样和光源采样进行混合密度。我们可以将其插入到`ray_color()`中：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -3557,97 +3484,77 @@ plug it into `ray_color()`:
             return color_from_emission + color_from_scatter;
         }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> The ray_color function, using mixture PDF]
+[Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> ray_color函数，使用混合PDF]
 
 </div>
 
 <div class='together'>
-1000 samples per pixel yields:
+每个像素1000个样本产生的结果如下：
 
-  ![<span class='num'>Image 11:</span> Cornell box, mixture density of cosine and light sampling
+  ![<span class='num'>图像 11：</span> Cornell 盒子，余弦采样和光源采样的混合密度
   ](../images/img-3.11-cosine-and-light.jpg class='pixel')
 
 </div>
 
 
 
-Some Architectural Decisions
+一些架构决策
 ====================================================================================================
-We won't write any code in this chapter. We’re at a crossroads and we need to make some
-architectural decisions.
+在本章中，我们不会编写任何代码。我们正处于一个十字路口，需要做出一些架构决策。
 
-The mixture-density approach is an alternative to having more traditional shadow rays. These are
-rays that check for an unobstructed path from an intersection point to a given light source. Rays
-that intersect an object between a point and a given light source indicate that the intersection
-point is in the shadow of that particular light source. The mixture-density approach is something
-that I personally prefer, because in addition to lights, you can sample windows or bright cracks
-under doors or whatever else you think might be bright -- or important. But you'll still see shadow
-rays in most professional path tracers. Typically they'll have a predefined number of shadow rays
-(_e.g_ 1, 4, 8, 16) where over the course of rendering, at each place where the path tracing ray
-intersects, they'll send these terminal shadow rays to random lights in the scene to determine if
-the intersection is lit by that random light. The intersection will either be lit by that light, or
-completely in shadow, where more shadow rays lead to a more accurate illumination. After all of the
-shadow rays terminate (either at a light or at an occluding surface), the inital path tracing ray
-continues on and more shadow rays are sent at the next intersection. You can't tell the shadow rays
-what is important, you can only tell them what is emissive, so shadow rays work best on simpler
-scenes that don't have overly complicated photon distribution. That said, shadow rays terminate at
-the first thing they run into and don't bounce around, so one shadow ray is cheaper than one path
-tracing ray, which is the reason that you'll typically see a lot more shadow rays than path tracing
-rays (_e.g_ 1, 4, 8, 16). You could choose shadow rays over mixture-density in a more restricted
-scene; that’s a personal design preference. Shadow rays tend to be cheaper for a crude result than
-mixture-density and is becoming increasingly common in realtime.
+混合密度方法是传统阴影射线的一种替代方法。传统的阴影射线是检查从交点到给定光源的路径是否被阻挡。
+如果射线与某个物体相交，则表示该交点处于该特定光源的阴影中。我个人更喜欢混合密度方法，因为除了光源，
+你还可以采样窗户、门下的亮缝或其他你认为可能很亮或很重要的地方。但在大多数专业路径追踪器中，你仍然会看到阴影射线。
+通常情况下，它们会有预定义数量的阴影射线（例如1、4、8、16），在渲染过程中，每当路径追踪射线与物体相交时，
+它们会将这些终端阴影射线发送到场景中的随机光源，以确定交点是否被该随机光源照亮。
+交点要么被该光源照亮，要么完全处于阴影中，更多的阴影射线会导致更准确的照明。
+在所有阴影射线终止（无论是在光源上还是在遮挡表面上）之后，初始路径追踪射线继续前进，并在下一个交点处发送更多的阴影射线。
+你无法告诉阴影射线什么是重要的，你只能告诉它们什么是发光的，因此阴影射线在没有过于复杂的光子分布的简单场景中效果最好。
+也就是说，阴影射线会在遇到的第一个物体上终止，并且不会反弹，因此一个阴影射线比一个路径追踪射线更便宜，
+这就是为什么你通常会看到比路径追踪射线更多的阴影射线（例如1、4、8、16）的原因。
+在一个更受限制的场景中，你可以选择阴影射线而不是混合密度方法；这是个人设计偏好。
+对于粗糙结果来说，阴影射线比混合密度方法更便宜，并且在实时渲染中越来越常见。
 
-There are some other issues with the code.
+代码中还存在一些其他问题。
 
-The PDF construction is hard coded in the `ray_color()` function. We should clean that up.
+PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清理。
 
-We've accidentally broken the specular rays (glass and metal), and they are no longer supported. The
-math would continue to work out if we just made their scattering function a delta function, but that
-would lead to all kinds of floating point disasters. We could either make specular reflection a
-special case that skips $f()/p()$, or we could set surface roughness to a very small -- but nonzero
--- value and have almost-mirrors that look perfectly smooth but that don’t generate NaNs. I don’t
-have an opinion on which way to do it (I have tried both and they both have their advantages), but
-we have smooth metal and glass code anyway, so we'll add perfect specular surfaces that just skip
-over explicit $f()/p()$ calculations.
+我们不小心破坏了镜面反射射线（玻璃和金属），它们不再受支持。
+如果我们将它们的散射函数设置为一个delta函数，数学上仍然是成立的，但会导致各种浮点数灾难。
+我们可以将镜面反射作为一个特殊情况，跳过$f()/p()$的计算，或者将表面粗糙度设置为一个非常小但非零的值，
+从而得到几乎是镜面的表面，看起来非常光滑，但不会产生NaN值。我对如何处理没有意见（我尝试过两种方法，它们都有各自的优势），
+但我们已经有了平滑的金属和玻璃代码，所以我们将添加完美的镜面表面，跳过显式的$f()/p()$计算。
 
-We also lack a real background function infrastructure in case we want to add an environment map or
-a more interesting functional background. Some environment maps are HDR (the RGB components are
-normalized floats rather than 0–255 bytes). Our output has been HDR all along; we’ve just been
-truncating it.
+此外，我们缺乏真正的背景函数基础设施，以防我们想要添加环境贴图或更有趣的功能背景。
+一些环境贴图是HDR格式（RGB分量是归一化浮点数，而不是0-255的字节）。我们的输出一直都是HDR的；
+我们只是截断了它。
 
-Finally, our renderer is RGB. A more physically based one -- like an automobile manufacturer might
-use -- would probably need to use spectral colors and maybe even polarization. For a movie renderer,
-most studios still get away with RGB. You can make a hybrid renderer that has both modes, but that
-is of course harder. I’m going to stick to RGB for now, but I will touch on this at the end of the
-book.
+最后，我们的渲染器是RGB的。一个更基于物理的渲染器，比如汽车制造商可能会使用的渲染器，可能需要使用光谱颜色，
+甚至可能需要使用偏振。对于电影渲染器，大多数工作室仍然使用RGB。你可以创建一个混合渲染器，同时具有这两种模式，
+但这当然更难。我现在将继续使用RGB，但我会在本书的最后谈到这个问题。
 
 
 
-Cleaning Up PDF Management
+简化PDF管理
 ====================================================================================================
-So far I have the `ray_color()` function create two hard-coded PDFs:
+到目前为止，`ray_color()`函数创建了两个硬编码的PDF：
 
-  1. `p0()` related to the shape of the light
-  2. `p1()` related to the normal vector and type of surface
+1. `p0()`与光源的形状相关
+2. `p1()`与法向量和表面类型相关
 
-We can pass information about the light (or whatever `hittable` we want to sample) into the
-`ray_color()` function, and we can ask the `material` function for a PDF (we would have to add
-instrumentation to do that). We also need to know if the scattered ray is specular, and we can do
-this either by asking the `hit()` function or the `material` class.
+我们可以将关于光源（或者我们想要采样的任何`hittable`）的信息传递给`ray_color()`函数，
+并且我们可以向`material`函数请求一个PDF（我们需要添加一些机制来实现这一点）。
+我们还需要知道散射光线是否是镜面反射，我们可以通过询问`hit()`函数或`material`类来实现这一点。
 
-
-Diffuse Versus Specular
+漫反射与镜面反射
 ------------------------
-One thing we would like to allow for is a material -- like varnished wood -- that is partially ideal
-specular (the polish) and partially diffuse (the wood). Some renderers have the material generate
-two rays: one specular and one diffuse. I am not fond of branching, so I would rather have the
-material randomly decide whether it is diffuse or specular. The catch with that approach is that we
-need to be careful when we ask for the PDF value, and `ray_color()` needs to be aware of whether
-this ray is diffuse or specular. Fortunately, we have decided that we should only call the
-`pdf_value()` if it is diffuse, so we can handle that implicitly.
+我们希望允许材质（例如上光木材）部分是理想的镜面反射（光泽部分），部分是漫反射（木材部分）。
+一些渲染器会生成两条光线：一条是镜面反射，一条是漫反射。我不喜欢使用分支，所以我更愿意让材质随机决定是漫反射还是镜面反射。
+但是这种方法的问题在于，当我们请求PDF值时需要小心，而且`ray_color()`函数需要知道这条光线是漫反射还是镜面反射。
+幸运的是，我们已经决定只有在漫反射时才调用`pdf_value()`，所以我们可以隐式处理这个问题。
 
 <div class='together'>
-We can redesign `material` and stuff all the new arguments into a class like we did for `hittable`:
+我们可以重新设计`material`类，并将所有新的参数都放入一个类中，就像我们为`hittable`做的那样：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
     class scatter_record {
@@ -3673,12 +3580,12 @@ We can redesign `material` and stuff all the new arguments into a class like we 
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [material-refactor]: <kbd>[material.h]</kbd> Refactoring the material class]
+[Listing [material-refactor]: <kbd>[material.h]</kbd> 重构material类]
 
 </div>
 
 <div class='together'>
-The `lambertian` material becomes simpler:
+`lambertian`材质变得更简单：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class lambertian : public material {
@@ -3705,12 +3612,12 @@ The `lambertian` material becomes simpler:
         shared_ptr<texture> albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [lambertian-scatter]: <kbd>[material.h]</kbd> New lambertian scatter() method]
+[Listing [lambertian-scatter]: <kbd>[material.h]</kbd> 新的lambertian scatter()方法]
 
 </div>
 
 <div class='together'>
-As does the `isotropic` material:
+`isotropic`材质也变得简单：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class isotropic : public material {
@@ -3738,12 +3645,12 @@ As does the `isotropic` material:
         shared_ptr<texture> albedo;
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [isotropic-scatter]: <kbd>[material.h]</kbd> New isotropic scatter() method]
+[Listing [isotropic-scatter]: <kbd>[material.h]</kbd> 新的isotropic scatter()方法]
 
 </div>
 
 <div class='together'>
-And `ray_color()` changes are small:
+`ray_color()`的变化很小：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -3754,11 +3661,11 @@ And `ray_color()` changes are small:
         const {
             hit_record rec;
 
-            // If we've exceeded the ray bounce limit, no more light is gathered.
+            // 如果超过了光线反射次数的限制，不再收集光线。
             if (depth <= 0)
                 return color(0,0,0);
 
-            // If the ray hits nothing, return the background color.
+            // 如果光线没有击中任何物体，返回背景颜色。
             if (!world.hit(r, interval(0.001, infinity), rec))
                 return background;
 
@@ -3794,16 +3701,15 @@ And `ray_color()` changes are small:
         }
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> The ray_color function, using mixture PDF]
+[Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> 使用混合PDF的ray_color函数]
 
 </div>
 
 
-Handling Specular
+处理镜面反射
 ------------------
-We have not yet dealt with specular surfaces, nor instances that mess with the surface normal. But
-this design is clean overall, and those are all fixable. For now, I will just fix `specular`. Metal
-and dielectric materials are easy to fix.
+我们还没有处理镜面表面，也没有处理会影响表面法线的情况。但是总体上，这个设计是干净的，而且所有这些问题都是可以解决的。
+现在，我将修复`specular`。金属和介质材料很容易修复。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class metal : public material {
@@ -3865,14 +3771,13 @@ and dielectric materials are easy to fix.
       ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [material-scatter]: <kbd>[material.h]</kbd> The metal and dielectric scatter methods]
+[Listing [material-scatter]: <kbd>[material.h]</kbd> metal和dielectric的scatter方法]
 
-Note that if the fuzziness is nonzero, this surface isn’t really ideally specular, but the implicit
-sampling works just like it did before. We're effectively skipping all of our PDF work for the
-materials that we're treating specularly.
+请注意，如果模糊度不为零，这个表面实际上并不是理想的镜面反射，但隐式采样的工作方式与之前相同。
+对于我们将镜面处理的材料，我们实际上跳过了所有的PDF计算。
 
 <div class='together'>
-`ray_color()` just needs a new case to generate an implicitly sampled ray:
+`ray_color()`只需要一个新的情况来生成隐式采样的光线：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class camera {
@@ -3901,22 +3806,20 @@ materials that we're treating specularly.
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [ray-color-implicit]: <kbd>[camera.h]</kbd>
-    Ray color function with implicitly-sampled rays]
+    使用隐式采样光线的Ray color函数]
 
 </div>
 
-We'll check our work by changing a block to metal. We'd also like to swap out one of the blocks for
-a glass object, but we'll push that off for the next section. Glass objects are difficult to render
-well, so we'd like to make a PDF for them, but we have some more work to do before we're able to do
-that.
+我们将通过将一个盒子更改为金属来检查我们的工作。我们还想将其中一个盒子替换为玻璃对象，但我们将在下一节中完成。
+玻璃对象很难渲染得很好，所以我们想为它们创建一个PDF，但在能够这样做之前，我们还有一些工作要做。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     int main() {
         ...
-        // Light
+        // 光源
         world.add(make_shared<quad>(point3(213,554,227), vec3(130,0,0), vec3(0,0,105), light));
 
-        // Box 1
+        // 盒子1
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
         shared_ptr<material> aluminum = make_shared<metal>(color(0.8, 0.85, 0.88), 0.0);
         shared_ptr<hittable> box1 = box(point3(0,0,0), point3(165,330,165), aluminum);
@@ -3925,13 +3828,13 @@ that.
         box1 = make_shared<translate>(box1, vec3(265,0,295));
         world.add(box1);
 
-        // Box 2
+        // 盒子2
         shared_ptr<hittable> box2 = box(point3(0,0,0), point3(165,165,165), white);
         box2 = make_shared<rotate_y>(box2, -18);
         box2 = make_shared<translate>(box2, vec3(130,0,65));
         world.add(box2);
 
-        // Light Sources
+        // 光源
         hittable_list lights;
         auto m = shared_ptr<material>();
         lights.add(make_shared<quad>(point3(343,554,332), vec3(-130,0,0), vec3(0,0,-105), m));
@@ -3939,90 +3842,77 @@ that.
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [scene-cornell-al]: <kbd>[main.cc]</kbd> Cornell box scene with aluminum material]
+[Listing [scene-cornell-al]: <kbd>[main.cc]</kbd> 使用铝材料的Cornell盒子场景]
 
 <div class='together'>
-The resulting image has a noisy reflection on the ceiling because the directions toward the box are
-not sampled with more density.
+结果图像在天花板上有嘈杂的反射，因为朝向盒子的方向没有更密集的采样。
 
-  ![<span class='num'>Image 12:</span> Cornell box with arbitrary PDF functions
-  ](../images/img-3.12-arbitrary-pdf.jpg class='pixel')
+  ![<span class='num'>图像 12：</span>带有任意PDF函数的Cornell盒子](../images/img-3.12-arbitrary-pdf.jpg class='pixel')
 
 </div>
 
 
-Sampling a Sphere Object
+采样一个球体对象
 -------------------------
-The noisiness on the ceiling could be reduced by making a PDF of the metal block. We would also want
-a PDF for the block if we made it glass. But making a PDF for a block is quite a bit of work and
-isn't terribly interesting, so let’s create a PDF for a glass sphere instead. It's quicker and makes
-for a more interesting render. We need to figure out how to sample a sphere to determine an
-appropriate PDF distribution. If we want to sample a sphere from a point outside of the sphere, we
-can't just pick a random point on its surface and be done. If we did that, we would frequently pick
-a point on the far side of the sphere, which would be occluded by the front side of the sphere. We
-need a way to uniformly sample the side of the sphere that is visible from an arbitrary point. When
-we sample a sphere’s solid angle uniformly from a point outside the sphere, we are really just
-sampling a cone uniformly. The cone axis goes from the ray origin through the sphere center, with
-the sides of the cone tangent to the sphere -- see illustration below. Let’s say the code has
-`theta_max`. Recall from the Generating Random Directions chapter that to sample $\theta$ we have:
+通过为金属盒子创建一个概率密度函数（PDF），可以减少天花板上的噪点。如果我们将其制作成玻璃材质，我们也会希望为盒子创建一个PDF。
+但是为盒子创建一个PDF需要相当多的工作，而且并不是非常有趣，所以我们来为一个玻璃球创建一个PDF。这样更快，也能产生更有趣的渲染效果。
+我们需要找出如何采样一个球体以确定适当的PDF分布。如果我们想从球体外部采样一个球体，我们不能只是在其表面上随机选择一个点就结束了。
+如果我们这样做，我们经常会选择到球体的另一侧，而这一侧会被球体的前面遮挡。我们需要一种方法来均匀采样从任意点可见的球体的一侧。
+当我们从球体外部均匀采样球体的立体角时，实际上是在均匀采样一个圆锥体。圆锥体的轴从射线起点通过球体中心，圆锥体的侧面与球体相切--见下图。
+假设代码中有`theta_max`。回想一下，在生成随机方向的章节中，要采样$\theta$，我们有：
 
   $$ r_2 = \int_{0}^{\theta} 2 \pi f(\theta') \sin(\theta') d\theta' $$
 
-Here $f(\theta')$ is an as-of-yet uncalculated constant $C$, so:
+这里的$f(\theta')$是一个尚未计算的常数$C$，所以：
 
   $$ r_2 = \int_{0}^{\theta} 2 \pi C \sin(\theta') d\theta' $$
 
-If we solve through the calculus:
+如果我们通过微积分解决：
 
   $$ r_2 = 2\pi \cdot C \cdot (1-\cos(\theta)) $$
 
-So
+所以
 
   $$ cos(\theta) = 1 - \frac{r_2}{2 \pi \cdot C} $$
 
-We are constraining our distribution so that the random direction must be less than $\theta_{max}$.
-This means that the integral from 0 to $\theta_{max}$ must be one, and therefore $r_2 = 1$. We can
-use this to solve for $C$:
+我们限制我们的分布，使得随机方向必须小于$\theta_{max}$。这意味着从0到$\theta_{max}$的积分必须为1，因此$r_2 = 1$。我们可以用这个来解$C$：
 
   $$ r_2 = 2\pi \cdot C \cdot (1-\cos(\theta)) $$
   $$ 1 = 2\pi \cdot C \cdot (1-\cos(\theta_{max})) $$
   $$ C = \frac{1}{2\pi \cdot (1-\cos(\theta_{max})} $$
 
-Which gives us an equality between $\theta$, $\theta_{max}$, and $r_2$:
+这给出了$\theta$、$\theta_{max}$和$r_2$之间的等式：
 
   $$ \cos(\theta) = 1 + r_2 \cdot (\cos(\theta_{max})-1) $$
 
-We sample $\phi$ like before, so:
+我们像以前一样采样$\phi$，所以：
 
   $$ z = \cos(\theta) = 1 + r_2 \cdot (\cos(\theta_{max}) - 1) $$
   $$ x = \cos(\phi) \cdot \sin(\theta) = \cos(2\pi \cdot r_1) \cdot \sqrt{1-z^2} $$
   $$ y = \sin(\phi) \cdot \sin(\theta) = \sin(2\pi \cdot r_1) \cdot \sqrt{1-z^2} $$
 
-Now what is $\theta_{max}$?
+那么$\theta_{max}$是多少呢？
 
   ![Figure [sphere-enclosing-cone]: A sphere-enclosing cone
   ](../images/fig-3.12-sphere-enclosing-cone.jpg)
 
-We can see from the figure that $\sin(\theta_{max}) = R / length(\mathbf{c} - \mathbf{p})$. So:
+从图中可以看出，$\sin(\theta_{max}) = R / length(\mathbf{c} - \mathbf{p})$。所以：
 
   $$ \cos(\theta_{max}) = \sqrt{1 - \frac{R^2}{length^2(\mathbf{c} - \mathbf{p})}} $$
 
-We also need to evaluate the PDF of directions. For a uniform distribution toward the sphere the PDF
-is $1/\mathit{solid_angle}$. What is the solid angle of the sphere? It has something to do with the
-$C$ above. It is -- by definition -- the area on the unit sphere, so the integral is
+我们还需要计算方向的概率密度函数（PDF）。对于朝向球体的均匀分布，PDF为$1/\mathit{solid\_angle}$。球体的立体角是多少呢？
+它与上面的$C$有关。根据定义，它是单位球体上的面积，所以积分是
 
   $$ \mathit{solid angle} = \int_{0}^{2\pi} \int_{0}^{\theta_{max}} \sin(\theta)
-       = 2 \pi \cdot (1-\cos(\theta_{max})) $$
+     = 2 \pi \cdot (1-\cos(\theta_{max})) $$
 
-It’s good to check the math on all such calculations. I usually plug in the extreme cases (thank you
-for that concept, Mr. Horton -- my high school physics teacher). For a zero radius sphere
-$\cos(\theta_{max}) = 0$, and that works. For a sphere tangent at $\mathbf{p}$,
-$\cos(\theta_{max}) = 0$, and $2\pi$ is the area of a hemisphere, so that works too.
+对于所有这样的计算，最好检查一下数学计算是否正确。我通常会将极端情况代入（感谢我的高中物理老师霍顿先生提出的概念）。
+对于半径为零的球体，$\cos(\theta_{max}) = 0$，这是正确的。对于与$\mathbf{p}$相切的球体，$\cos(\theta_{max}) = 0$，$2\pi$是半球的面积，所以也是正确的。
 
 
-Updating the Sphere Code
+更新球体代码
 -------------------------
-The sphere class needs the two PDF-related functions:
+球体类需要两个与概率密度函数（PDF）相关的函数：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class sphere : public hittable {
@@ -4032,7 +3922,7 @@ The sphere class needs the two PDF-related functions:
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
         double pdf_value(const point3& origin, const vec3& direction) const override {
-            // This method only works for stationary spheres.
+            // 这个方法只适用于静止的球体。
 
             hit_record rec;
             if (!this->hit(ray(origin, direction), interval(0.001, infinity), rec))
@@ -4071,32 +3961,32 @@ The sphere class needs the two PDF-related functions:
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [sphere-pdf]: <kbd>[sphere.h]</kbd> Sphere with PDF]
+[Listing [sphere-pdf]: <kbd>[sphere.h]</kbd> 带有概率密度函数的球体]
 
 <div class='together'>
-We can first try just sampling the sphere rather than the light:
+我们首先尝试对球体进行采样，而不是光源：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     int main() {
         ...
 
-        // Light
+        // 光源
         world.add(make_shared<quad>(point3(213,554,227), vec3(130,0,0), vec3(0,0,105), light));
 
 
         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
-        // Box
+        // 盒子
         shared_ptr<hittable> box1 = box(point3(0,0,0), point3(165,330,165), white);
         box1 = make_shared<rotate_y>(box1, 15);
         box1 = make_shared<translate>(box1, vec3(265,0,295));
         world.add(box1);
 
-        // Glass Sphere
+        // 玻璃球体
         auto glass = make_shared<dielectric>(1.5);
         world.add(make_shared<sphere>(point3(190,90,190), 90, glass));
         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
 
-        // Light Sources
+        // 光源列表
         hittable_list lights;
         auto m = shared_ptr<material>();
         lights.add(make_shared<quad>(point3(343,554,332), vec3(-130,0,0), vec3(0,0,-105), m));
@@ -4104,27 +3994,24 @@ We can first try just sampling the sphere rather than the light:
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [sampling-sphere]: <kbd>[main.cc]</kbd> Sampling just the sphere]
+[Listing [sampling-sphere]: <kbd>[main.cc]</kbd> 仅对球体进行采样]
 
 </div>
 
 <div class='together'>
-This yields a noisy room, but the caustic under the sphere is good. It took five times as long as
-sampling the light did for my code. This is probably because those rays that hit the glass are
-expensive!
+这样会得到一个嘈杂的房间，但是球体下的焦散效果很好。我的代码运行时间是采样光源的5倍。这可能是因为击中玻璃的光线比较昂贵！
 
-  ![<span class='num'>Image 13:</span> Cornell box with glass sphere, using new PDF functions
+  ![<span class='num'>图像 13:</span> 带有玻璃球体的康奈尔盒子，使用新的概率密度函数
   ](../images/img-3.13-cornell-glass-sphere.jpg class='pixel')
 
 </div>
 
 
-Adding PDF Functions to Hittable Lists
+向Hittable列表添加PDF函数
 ---------------------------------------
-We should probably just sample both the sphere and the light. We can do that by creating a mixture
-density of their two distributions. We could do that in the `ray_color()` function by passing a list
-of hittables in and building a mixture PDF, or we could add PDF functions to `hittable_list`. I
-think both tactics would work fine, but I will go with instrumenting `hittable_list`.
+我们可能需要对球体和光源进行采样。我们可以通过创建两个分布的混合密度来实现。
+我们可以在`ray_color()`函数中通过传递一个hittable列表并构建混合PDF来实现，或者我们可以向`hittable_list`添加PDF函数。
+我认为这两种策略都可以很好地工作，但我选择对`hittable_list`进行修改。
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     class hittable_list : public hittable {
@@ -4152,16 +4039,16 @@ think both tactics would work fine, but I will go with instrumenting `hittable_l
         ...
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [density-mixture]: <kbd>[hittable_list.h]</kbd> Creating a mixture of densities]
+[Listing [density-mixture]: <kbd>[hittable_list.h]</kbd> 创建密度的混合]
 
 <div class='together'>
-We assemble a list to pass to `render()` from `main()`:
+我们从`main()`函数中组装一个列表传递给`render()`：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     int main() {
         ...
 
-        // Light Sources
+        // 光源列表
         hittable_list lights;
         auto m = shared_ptr<material>();
         lights.add(make_shared<quad>(point3(343,554,332), vec3(-130,0,0), vec3(0,0,-105), m));
@@ -4172,39 +4059,34 @@ We assemble a list to pass to `render()` from `main()`:
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [scene-density-mixture]: <kbd>[main.cc]</kbd> Updating the scene]
+[Listing [scene-density-mixture]: <kbd>[main.cc]</kbd> 更新场景]
 
 </div>
 
 <div class='together'>
-And we get a decent image with 1000 samples as before:
+我们使用1000个样本得到了一个不错的图像：
 
-  ![<span class='num'>Image 14:</span> Cornell box using a mixture of glass & light PDFs
+  ![<span class='num'>图像 14:</span> 康奈尔盒子使用玻璃和光源的混合PDF
   ](../images/img-3.14-glass-and-light.jpg class='pixel')
 
 </div>
 
 
-Handling Surface Acne
+处理表面痤疮
 ----------------------
-An astute reader pointed out there are some black specks in the image above. All Monte Carlo Ray
-Tracers have this as a main loop:
+一个敏锐的读者指出上面的图像中有一些黑色斑点。所有的蒙特卡洛光线追踪器都有一个主循环：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     pixel_color = average(many many samples)
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you find yourself getting some form of acne in your renders, and this acne is white or black --
-where one "bad" sample seems to kill the whole pixel -- then that sample is probably a huge number
-or a `NaN` (Not A Number). This particular acne is probably a `NaN`. Mine seems to come up once in
-every 10–100 million rays or so.
+如果你在渲染中遇到了某种形式的痤疮，而这些痤疮是白色或黑色的——其中一个“坏”样本似乎会破坏整个像素——那么该样本可能是一个巨大的数或者是`NaN`（不是一个数字）。
+这种特定的痤疮可能是`NaN`。我的渲染中大约每1亿到1千万条光线中会出现一次这样的情况。
 
 <div class='together'>
-So big decision: sweep this bug under the rug and check for `NaN`s, or just kill `NaN`s and hope
-this doesn't come back to bite us later. I will always opt for the lazy strategy, especially when I
-know that working with floating point is hard. First, how do we check for a `NaN`? The one thing I
-always remember for `NaN`s is that a `NaN` does not equal itself. Using this trick, we update the
-`write_color()` function to replace any `NaN` components with zero:
+所以我们面临一个重要的决策：是将这个错误掩盖起来并检查`NaN`，还是直接将`NaN`置为零并希望这不会在后面给我们带来麻烦。
+我总是倾向于采取懒惰的策略，特别是当我知道使用浮点数很困难时。首先，我们如何检查`NaN`？我永远记得一个关于`NaN`的特性，
+那就是`NaN`不等于它自己。利用这个技巧，我们更新`write_color()`函数，将任何`NaN`组件替换为零：
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
     void write_color(std::ostream& out, const color& pixel_color, int samples_per_pixel) {
@@ -4214,67 +4096,58 @@ always remember for `NaN`s is that a `NaN` does not equal itself. Using this tri
 
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++ highlight
-        // Replace NaN components with zero.
+        // 将NaN组件替换为零。
         if (r != r) r = 0.0;
         if (g != g) g = 0.0;
         if (b != b) b = 0.0;
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
 
-        // Divide the color by the number of samples and gamma-correct for gamma=2.0.
+        // 将颜色除以样本数，并进行gamma校正（gamma=2.0）。
         auto scale = 1.0 / samples_per_pixel;
         r = sqrt(scale * r);
         g = sqrt(scale * g);
         b = sqrt(scale * b);
 
-        // Write the translated [0,255] value of each color component.
+        // 将每个颜色分量的[0,255]范围内的值写入输出流。
         static const interval intensity(0.000, 0.999);
         out << int(256 * intensity.clamp(r)) << ' '
             << int(256 * intensity.clamp(g)) << ' '
             << int(256 * intensity.clamp(b)) << '\n';
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [write-color-nan]: <kbd>[color.h]</kbd> NaN-tolerant write_color function]
+[Listing [write-color-nan]: <kbd>[color.h]</kbd> 可处理NaN的write_color函数]
 
 </div>
 
 <div class='together'>
-Happily, the black specks are gone:
+令人高兴的是，黑色斑点消失了：
 
-  ![<span class='num'>Image 15:</span> Cornell box with anti-acne color function
-  ](../images/img-3.15-book3-final.jpg class='pixel')
+  ![<span class='num'>图像 15：</span>带有抗痤疮颜色函数的康奈尔盒子](../images/img-3.15-book3-final.jpg class='pixel')
 
 </div>
 
 
 
-The Rest of Your Life
+你的余生
 ====================================================================================================
-The purpose of this book was to walk through all of the little details (dotting all the i's and
-crossing all of the t's) necessary when organizing a physically based renderer’s sampling approach.
-You should now be able to take all of this detail and explore a lot of different potential paths.
+本书的目的是详细介绍开发基于物理的渲染器采样方法时所需的所有细节（dotting all the i's and crossing all of the t's）。
+现在，你应该能够将所有这些细节应用到不同的潜在路径中。
 
-If you want to explore Monte Carlo methods, look into bidirectional and path spaced approaches such
-as Metropolis. Your probability space won't be over solid angle, but will instead be over path
-space, where a path is a multidimensional point in a high-dimensional space. Don’t let that scare
-you -- if you can describe an object with an array of numbers, mathematicians call it a point in the
-space of all possible arrays of such points. That’s not just for show. Once you get a clean
-abstraction like that, your code can get clean too. Clean abstractions are what programming is all
-about!
+如果你想探索蒙特卡洛方法，可以研究双向和路径空间方法，如Metropolis算法。你的概率空间不再是固体角度，
+而是路径空间，其中路径是高维空间中的多维点。不要被吓到——如果你可以用一组数字描述一个对象，
+数学家称之为所有可能数组的空间中的一个点。这不仅仅是为了好看。一旦你得到了这样一个清晰的抽象，
+你的代码也可以变得清晰起来。清晰的抽象是编程的核心！
 
-If you want to do movie renderers, look at the papers out of studios and Solid Angle. They are
-surprisingly open about their craft.
+如果你想做电影渲染器，看看工作室和Solid Angle的论文。他们对自己的工作非常开放。
 
-If you want to do high-performance ray tracing, look first at papers from Intel and NVIDIA. They are
-also surprisingly open.
+如果你想做高性能光线追踪，首先看看Intel和NVIDIA的论文。他们也非常开放。
 
-If you want to do hard-core physically based renderers, convert your renderer from RGB to spectral.
-I am a big fan of each ray having a random wavelength and almost all the RGBs in your program
-turning into floats. It sounds inefficient, but it isn’t!
+如果你想做硬核基于物理的渲染器，将你的渲染器从RGB转换为光谱。我非常喜欢每条光线都有一个随机波长，
+而且程序中几乎所有的RGB都变成浮点数。听起来效率低下，但实际上并不是！
 
-Regardless of what direction you take, add a glossy BRDF model. There are many to choose from, and
-each has its advantages.
+无论你选择哪个方向，都要添加一个光泽的BRDF模型。有很多选择，每个模型都有其优势。
 
-Have fun!
+玩得开心！
 
 [Peter Shirley][]<br>
 Salt Lake City, March, 2016
