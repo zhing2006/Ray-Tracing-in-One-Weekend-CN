@@ -15,3 +15,4 @@ pub mod rtw_stb_image;
 pub mod perlin;
 pub mod quad;
 pub mod constant_medium;
+pub mod onb;

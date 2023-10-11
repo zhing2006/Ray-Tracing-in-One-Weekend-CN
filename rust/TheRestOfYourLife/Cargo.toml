@@ -23,6 +23,16 @@ name = "sphere_importance"
 path = "src/bin/sphere_importance.rs"
 test = false
 
+[[bin]]
+name = "cos_cubed"
+path = "src/bin/cos_cubed.rs"
+test = false
+
+[[bin]]
+name = "cos_density"
+path = "src/bin/cos_density.rs"
+test = false
+
 [dependencies]
 rand = "0"
 stb_image = "0.2"

@@ -2554,6 +2554,38 @@ Rust实现
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [cos-cubed]: <kbd>[cos_cubed.cc]</kbd> 使用$cos^3(x)$进行积分]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend;
+
+    fn f(r2: f64) -> f64 {
+        let z = 1.0 - r2;
+        let cos_theta = z;
+        cos_theta * cos_theta * cos_theta
+    }
+
+    fn pdf() -> f64 {
+        1.0 / (2.0 * rtweekend::PI)
+    }
+
+    fn main() {
+        const N: usize = 1000000;
+
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+            let r2 = rtweekend::random_double();
+            sum += f(r2) / pdf();
+        });
+
+        println!("PI/2 = {:.12}", rtweekend::PI / 2.0);
+        println!("Estimate = {:.12}", sum / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 </div>
 
 
@@ -2597,6 +2629,25 @@ Rust实现
 [Listing [random-cosine-direction]: <kbd>[vec3.h]</kbd>
     生成余弦分布方向的随机向量的实用函数]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub fn random_cosine_direction() -> Vec3 {
+        let r1 = random_double();
+        let r2 = random_double();
+
+        let phi = 2.0 * rtweekend::PI * r1;
+        let x = phi.cos() * r2.sqrt();
+        let y = phi.sin() * r2.sqrt();
+        let z = (1.0 - r2).sqrt();
+
+        Vec3::new(x, y, z)
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 </div>
 
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ C++
@@ -2630,6 +2681,38 @@ Rust实现
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [cos-density]: <kbd>[cos_density.cc]</kbd> 使用余弦密度函数进行积分]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use the_rest_of_your_life::rtweekend;
+    use the_rest_of_your_life::vec3::{self, Vec3};
+
+    fn f(d: Vec3) -> f64 {
+        let cos_theta = d.z();
+        cos_theta * cos_theta * cos_theta
+    }
+
+    fn pdf(d: Vec3) -> f64 {
+        d.z() / rtweekend::PI
+    }
+
+    fn main() {
+        const N: usize = 1000000;
+
+        let mut sum = 0.0;
+        (0..N).for_each(|_| {
+            let d = vec3::random_cosine_direction();
+            sum += f(d) / pdf(d);
+        });
+
+        println!("PI/2 = {:.12}", rtweekend::PI / 2.0);
+        println!("Estimate = {:.12}", sum / N as f64);
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 我们可以在需要时生成其他密度函数。这个`random_cosine_direction()`函数生成一个按$\cos(\theta)$加权的随机方向，
 其中$\theta$是与$z$轴的角度。
@@ -2757,6 +2840,70 @@ ONB类
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-onb]: <kbd>[onb.h]</kbd> 正交基类]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    use std::ops::{
+        Index,
+        IndexMut,
+    };
+
+    use super::vec3::{self, Vec3};
+
+    #[derive(Default)]
+    pub struct Onb {
+        pub axis: [Vec3; 3],
+    }
+
+    impl Onb {
+        pub fn u(&self) -> Vec3 {
+            self.axis[0]
+        }
+        pub fn v(&self) -> Vec3 {
+            self.axis[1]
+        }
+        pub fn w(&self) -> Vec3 {
+            self.axis[2]
+        }
+
+        pub fn local(&self, a: f64, b: f64, c: f64) -> Vec3 {
+            a * self.u() + b * self.v() + c * self.w()
+        }
+        pub fn local_v(&self, a: Vec3) -> Vec3 {
+            a.x() * self.u() + a.y() * self.v() + a.z() * self.w()
+        }
+
+        pub fn new_from_w(w: Vec3) -> Self {
+            let unit_w = vec3::unit_vector(w);
+            let a = if unit_w.x().abs() > 0.9 {
+                Vec3::new(0.0, 1.0, 0.0)
+            } else {
+                Vec3::new(1.0, 0.0, 0.0)
+            };
+            let v = vec3::unit_vector(vec3::cross(unit_w, a));
+            let u = vec3::cross(unit_w, v);
+            Self { axis: [u, v, unit_w] }
+        }
+    }
+
+    impl Index<usize> for Onb {
+        type Output = Vec3;
+
+        fn index(&self, i: usize) -> &Self::Output {
+            &self.axis[i]
+        }
+    }
+
+    impl IndexMut<usize> for Onb {
+        fn index_mut(&mut self, i: usize) -> &mut Self::Output {
+            &mut self.axis[i]
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 <div class='together'>
 我们可以使用这个类来重写我们的Lambertian材质：
 
@@ -2785,6 +2932,33 @@ ONB类
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [scatter-onb]: <kbd>[material.h]</kbd> Scatter函数，使用正交基]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Lambertian {
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, pdf: &mut f64) -> bool {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            let uvw = Onb::new_from_w(rec.normal);
+            let mut scatter_direction = uvw.local_v(vec3::random_cosine_direction());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+            // 捕捉退化的散射方向
+            if scatter_direction.near_zero() {
+                scatter_direction = rec.normal;
+            }
+
+            *scattered = Ray::new_with_time(rec.p, scatter_direction, r_in.time());
+            *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            *pdf = vec3::dot(uvw.w(), scattered.direction()) / rtweekend::PI;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            true
+        }
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 </div>
 
@@ -2835,6 +3009,32 @@ ONB类
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-isotropic-impsample]: <kbd>[material.h]</kbd>
     各向同性材质，用于重要性采样的修改]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Isotropic {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, pdf: &mut f64) -> bool {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            *scattered = Ray::new_with_time(rec.p, vec3::random_unit_vector(), r_in.time());
+            *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            *pdf = 1.0 / (4.0 * rtweekend::PI);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            true
+        }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scattering_pdf(&self, _r_in: &Ray, _rec: &HitRecord, _scattered: &Ray) -> f64 {
+            1.0 / (4.0 * rtweekend::PI)
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -2940,6 +3140,58 @@ $\operatorname{p}(\omega) \cdot d\omega$。$d\omega$和$dA$之间存在几何关
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [ray-color-lights]: <kbd>[camera.h]</kbd> 光源采样的射线颜色]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+        fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable) -> Color {
+            ...
+            if let Some(mat) = rec.mat.clone() {
+                let mut scattered = Ray::default();
+                let mut attenuation = Color::default();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let mut pdf = 0.0;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+                let color_from_emission = mat.emitted(rec.u, rec.v, rec.p);
+                if !mat.scatter(r, &rec, &mut attenuation, &mut scattered, &mut pdf) {
+                    return color_from_emission;
+                }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let on_light = Point3::new(rtweekend::random_double_range(213.0, 343.0), 554.0, rtweekend::random_double_range(227.0, 332.0));
+                let to_light = on_light - rec.p;
+                let distance_squared = to_light.length_squared();
+                let to_light = vec3::unit_vector(to_light);
+
+                if vec3::dot(to_light, rec.normal) < 0.0 {
+                    return color_from_emission;
+                }
+
+                let light_area = (343.0 - 213.0) * (332.0 - 227.0);
+                let light_cosine = to_light.y().abs();
+                if light_cosine < 0.000001 {
+                    return color_from_emission;
+                }
+
+                pdf = distance_squared / (light_cosine * light_area);
+                scattered = Ray::new_with_time(rec.p, to_light, r.time());
+
+                let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                let color_from_scatter = (attenuation * scattering_pdf * self.ray_color(&scattered,  depth - 1, world)) / pdf;
+
+                color_from_emission + color_from_scatter
+            } else {
+                Color::default()
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 <div class='together'>
 使用每个像素10个样本，得到的结果如下：
 
@@ -2989,6 +3241,36 @@ $\operatorname{p}(\omega) \cdot d\omega$。$d\omega$和$dA$之间存在几何关
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [emitted-directional]: <kbd>[material.h]</kbd> 材质发射光线，单向]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub trait Material {
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn emitted(&self, _r_in: &Ray, _rec: &HitRecord, _u: f64, _v: f64, _p: vec3::Point3) -> Color {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            Color::new(0.0, 0.0, 0.0)
+        }
+        ...
+    }
+    ...
+    impl Material for DiffuseLight {
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn emitted(&self, _r_in: &Ray, rec: &HitRecord, u: f64, v: f64, p: vec3::Point3) -> Color {
+            if rec.front_face {
+                self.emit.value(u, v, p)
+            } else {
+                Color::default()
+            }
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 <div class='together'>
 这样我们就得到了：

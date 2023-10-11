@@ -8,10 +8,11 @@ use super::texture::{
   Texture,
   SolidColor,
 };
+use super::onb::Onb;
 
 pub trait Material {
-  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool;
-  fn emitted(&self, _u: f64, _v: f64, _p: vec3::Point3) -> Color {
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, pdf: &mut f64) -> bool;
+  fn emitted(&self, _r_in: &Ray, _rec: &HitRecord, _u: f64, _v: f64, _p: vec3::Point3) -> Color {
     Color::new(0.0, 0.0, 0.0)
   }
   fn scattering_pdf(&self, _r_in: &Ray, _rec: &HitRecord, _scattered: &Ray) -> f64 {
@@ -38,8 +39,9 @@ impl Lambertian {
 }
 
 impl Material for Lambertian {
-  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
-    let mut scatter_direction = vec3::random_on_hemisphere(rec.normal);
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, pdf: &mut f64) -> bool {
+    let uvw = Onb::new_from_w(rec.normal);
+    let mut scatter_direction = uvw.local_v(vec3::random_cosine_direction());
 
     // 捕捉退化的散射方向
     if scatter_direction.near_zero() {
@@ -48,6 +50,7 @@ impl Material for Lambertian {
 
     *scattered = Ray::new_with_time(rec.p, scatter_direction, r_in.time());
     *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+    *pdf = vec3::dot(uvw.w(), scattered.direction()) / rtweekend::PI;
     true
   }
 
@@ -71,7 +74,7 @@ impl Metal {
 }
 
 impl Material for Metal {
-  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, _pdf: &mut f64) -> bool {
     let reflected = vec3::reflect(vec3::unit_vector(r_in.direction()), rec.normal);
     *scattered = Ray::new_with_time(rec.p, reflected + self.fuzz * vec3::random_in_unit_sphere(), r_in.time());
     *attenuation = self.albedo;
@@ -99,7 +102,7 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
-  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, _pdf: &mut f64) -> bool {
     *attenuation = Color::new(1.0, 1.0, 1.0);
     let refraction_ratio = if rec.front_face { 1.0 / self.ir } else { self.ir };
 
@@ -138,12 +141,16 @@ impl DiffuseLight {
 }
 
 impl Material for DiffuseLight {
-  fn scatter(&self, _r_in: &Ray, _rec: &HitRecord, _attenuation: &mut Color, _scattered: &mut Ray) -> bool {
+  fn scatter(&self, _r_in: &Ray, _rec: &HitRecord, _attenuation: &mut Color, _scattered: &mut Ray, _pdf: &mut f64) -> bool {
     false
   }
 
-  fn emitted(&self, u: f64, v: f64, p: vec3::Point3) -> Color {
-    self.emit.value(u, v, p)
+  fn emitted(&self, _r_in: &Ray, rec: &HitRecord, u: f64, v: f64, p: vec3::Point3) -> Color {
+    if rec.front_face {
+      self.emit.value(u, v, p)
+    } else {
+      Color::default()
+    }
   }
 }
 
@@ -166,9 +173,14 @@ impl Isotropic {
 }
 
 impl Material for Isotropic {
-  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray) -> bool {
+  fn scatter(&self, r_in: &Ray, rec: &HitRecord, attenuation: &mut Color, scattered: &mut Ray, pdf: &mut f64) -> bool {
     *scattered = Ray::new_with_time(rec.p, vec3::random_unit_vector(), r_in.time());
     *attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+    *pdf = 1.0 / (4.0 * rtweekend::PI);
     true
+  }
+
+  fn scattering_pdf(&self, _r_in: &Ray, _rec: &HitRecord, _scattered: &Ray) -> f64 {
+    1.0 / (4.0 * rtweekend::PI)
   }
 }
