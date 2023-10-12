@@ -6,10 +6,10 @@ use super::interval::Interval;
 use super::vec3::{self, Point3, Vec3};
 use super::pdf::{
   Pdf,
-  CosinePdf,
   HittablePdf,
   MixturePdf,
 };
+use super::material::ScatterRecord;
 
 pub struct Camera {
   pub aspect_ratio: f64,  // Ratio of image width over height
@@ -174,17 +174,19 @@ impl Camera {
     }
 
     if let Some(mat) = rec.mat.clone() {
-      let mut scattered = Ray::default();
-      let mut attenuation = Color::default();
-      let mut pdf = 0.0;
+      let mut srec = ScatterRecord::default();
       let color_from_emission = mat.emitted(r, &rec, rec.u, rec.v, rec.p);
-      if !mat.scatter(r, &rec, &mut attenuation, &mut scattered, &mut pdf) {
+
+      if !mat.scatter(r, &rec, &mut srec) {
         return color_from_emission;
       }
 
-      let p0 = HittablePdf::new(lights, rec.p);
-      let p1 = CosinePdf::new(rec.normal);
-      let mixed_pdf = MixturePdf::new(&p0, &p1);
+      if srec.skip_pdf {
+        return srec.attenuation * self.ray_color(&srec.skip_pdf_ray, depth - 1, world, lights);
+      }
+
+      let light_pdf = HittablePdf::new(lights, rec.p);
+      let mixed_pdf = MixturePdf::new(&light_pdf, &*srec.pdf);
 
       let scattered = Ray::new_with_time(rec.p, mixed_pdf.generate(), r.time());
       let pdf = mixed_pdf.value(scattered.direction());
@@ -192,7 +194,7 @@ impl Camera {
       let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
 
       let sample_color = self.ray_color(&scattered, depth - 1, world, lights);
-      let color_from_scatter = (attenuation * scattering_pdf * sample_color) / pdf;
+      let color_from_scatter = (srec.attenuation * scattering_pdf * sample_color) / pdf;
 
       color_from_emission + color_from_scatter
     } else {

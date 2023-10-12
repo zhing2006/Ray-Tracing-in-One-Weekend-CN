@@ -8,6 +8,17 @@ pub trait Pdf {
   fn generate(&self) -> Vec3;
 }
 
+pub struct NonePdf;
+
+impl Pdf for NonePdf {
+  fn value(&self, _direction: Vec3) -> f64 {
+    0.0
+  }
+  fn generate(&self) -> Vec3 {
+    vec3::Vec3::new(1.0, 0.0, 0.0)
+  }
+}
+
 pub struct SpherePdf;
 
 impl Pdf for SpherePdf {

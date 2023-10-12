@@ -2387,7 +2387,7 @@ Rust实现
 这种新的漫反射材质实际上只是散射PDF为$p(\omega_o) = \frac{1}{2\pi}$。因此，我们的均匀PDF虽然不完全匹配Lambertian漫反射，
 但却完全匹配我们的均匀半球漫反射。在渲染时，我们应该得到一个略有不同的图像。
 
-  ![<span class='num'>图像 5:</span> Cornell盒子，使用均匀半球采样
+  ![<span class='num'>图像 5:</span> 康奈尔盒，使用均匀半球采样
   ](../images/img-3.04-cornell-refactor2.jpg class='pixel')
 
 它与我们之前的图片非常接近，但存在着不仅仅是噪声的差异。高盒子的正面颜色更加均匀。如果你不确定材质的最佳采样模式是什么，
@@ -4258,6 +4258,54 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [material-refactor]: <kbd>[material.h]</kbd> 重构material类]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+    pub struct NonePdf;
+
+    impl Pdf for NonePdf {
+        fn value(&self, _direction: Vec3) -> f64 {
+            0.0
+        }
+        fn generate(&self) -> Vec3 {
+            vec3::Vec3::new(1.0, 0.0, 0.0)
+        }
+    }
+
+    pub struct ScatterRecord {
+        pub attenuation: Color,
+        pub pdf: Box<dyn Pdf>,
+        pub skip_pdf: bool,
+        pub skip_pdf_ray: Ray,
+    }
+
+    impl Default for ScatterRecord {
+        fn default() -> Self {
+            Self {
+                attenuation: Color::default(),
+                pdf: Box::new(NonePdf{}),
+                skip_pdf: false,
+                skip_pdf_ray: Ray::default(),
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+    pub trait Material {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, srec: &mut ScatterRecord) -> bool;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+这里需要注意Rust和C++的不同，ScatterRecord中的pdf可以有多种不同的实现方案。比如使用Option，或者去掉skip_pdf，直接用None判断等等。
+本文使用添加NonePdf，保留skip_pdf的方案，这样代码改动量最少，能够最接近原文的C++实现。
+
+---
+
 </div>
 
 <div class='together'>
@@ -4289,6 +4337,33 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [lambertian-scatter]: <kbd>[material.h]</kbd> 新的lambertian scatter()方法]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Lambertian {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scatter(&self, _r_in: &Ray, rec: &HitRecord, srec: &mut ScatterRecord) -> bool {
+            srec.attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+            srec.pdf = Box::new(CosinePdf::new(rec.normal));
+            srec.skip_pdf = false;
+            true
+        }
+
+        fn scattering_pdf(&self, _r_in: &Ray, rec: &HitRecord, scattered: &Ray) -> f64 {
+            let cosine = vec3::dot(rec.normal, vec3::unit_vector(scattered.direction()));
+            if cosine < 0.0 {
+                0.0
+            } else {
+                cosine / rtweekend::PI
+            }
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -4322,6 +4397,28 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [isotropic-scatter]: <kbd>[material.h]</kbd> 新的isotropic scatter()方法]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Isotropic {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scatter(&self, _r_in: &Ray, rec: &HitRecord, srec: &mut ScatterRecord) -> bool {
+            srec.attenuation = self.albedo.value(rec.u, rec.v, rec.p);
+            srec.pdf = Box::new(SpherePdf{});
+            srec.skip_pdf = false;
+            true
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+        fn scattering_pdf(&self, _r_in: &Ray, _rec: &HitRecord, _scattered: &Ray) -> f64 {
+            1.0 / (4.0 * rtweekend::PI)
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -4378,6 +4475,63 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
     };
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> 使用混合PDF的ray_color函数]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+        ...
+        fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable, lights: &dyn Hittable) -> Color {
+            let mut rec = HitRecord::default();
+
+            // 如果我们超过了光线反弹限制，就不再收集光线。
+            if depth == 0 {
+                return Color::default();
+            }
+
+            // 如果光线没有击中了世界中的任何东西，则返回背景颜色。
+            if !world.hit(r, &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+                return self.background;
+            }
+
+            if let Some(mat) = rec.mat.clone() {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let mut srec = ScatterRecord::default();
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+                let color_from_emission = mat.emitted(r, &rec, rec.u, rec.v, rec.p);
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                if !mat.scatter(r, &rec, &mut srec) {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+                    return color_from_emission;
+                }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let light_pdf = HittablePdf::new(lights, rec.p);
+                let mixed_pdf = MixturePdf::new(&light_pdf, &*srec.pdf);
+
+                let scattered = Ray::new_with_time(rec.p, mixed_pdf.generate(), r.time());
+                let pdf = mixed_pdf.value(scattered.direction());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
+
+                let sample_color = self.ray_color(&scattered, depth - 1, world, lights);
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                let color_from_scatter = (srec.attenuation * scattering_pdf * sample_color) / pdf;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                color_from_emission + color_from_scatter
+            } else {
+                Color::default()
+            }
+        }
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -4449,6 +4603,53 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [material-scatter]: <kbd>[material.h]</kbd> metal和dielectric的scatter方法]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Material for Metal {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, srec: &mut ScatterRecord) -> bool {
+            srec.attenuation = self.albedo;
+            srec.skip_pdf = true;
+            let reflected = vec3::reflect(vec3::unit_vector(r_in.direction()), rec.normal);
+            srec.skip_pdf_ray = Ray::new_with_time(rec.p, reflected + self.fuzz * vec3::random_in_unit_sphere(), r_in.time());
+            true
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ...
+    impl Material for Dielectric {
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn scatter(&self, r_in: &Ray, rec: &HitRecord, srec: &mut ScatterRecord) -> bool {
+            srec.attenuation = Color::new(1.0, 1.0, 1.0);
+            srec.skip_pdf = true;
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            let refraction_ratio = if rec.front_face { 1.0 / self.ir } else { self.ir };
+
+            let unit_direction = vec3::unit_vector(r_in.direction());
+            let cos_theta = vec3::dot(-unit_direction, rec.normal).min(1.0);
+            let sin_theta = (1.0 - cos_theta * cos_theta).sqrt();
+
+            let cannot_refract = refraction_ratio * sin_theta > 1.0;
+            let direction = if cannot_refract || Self::reflectance(cos_theta, refraction_ratio) > rtweekend::random_double() {
+                vec3::reflect(unit_direction, rec.normal)
+            } else {
+                vec3::refract(unit_direction, rec.normal, refraction_ratio)
+            };
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            srec.skip_pdf_ray = Ray::new_with_time(rec.p, direction, r_in.time());
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+            true
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    注意和C++代码相比，这里srec.pdf指针在Default实现里面已经是NonePdf了，所以这里不需要再赋值为空了。
+
+---
+
 请注意，如果模糊度不为零，这个表面实际上并不是理想的镜面反射，但隐式采样的工作方式与之前相同。
 对于我们将镜面处理的材料，我们实际上跳过了所有的PDF计算。
 
@@ -4484,6 +4685,35 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
 [Listing [ray-color-implicit]: <kbd>[camera.h]</kbd>
     使用隐式采样光线的Ray color函数]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+        ...
+        fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable, lights: &dyn Hittable) -> Color {
+                ...
+                if !mat.scatter(r, &rec, &mut srec) {
+                    return color_from_emission;
+                }
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                if srec.skip_pdf {
+                    return srec.attenuation * self.ray_color(&srec.skip_pdf_ray, depth - 1, world, lights);
+                }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                let light_pdf = HittablePdf::new(lights, rec.p);
+                let mixed_pdf = MixturePdf::new(&light_pdf, &*srec.pdf);
+
+                ...
+        }
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 </div>
 
 我们将通过将一个盒子更改为金属来检查我们的工作。我们还想将其中一个盒子替换为玻璃对象，但我们将在下一节中完成。
@@ -4518,12 +4748,44 @@ PDF构建在`ray_color()`函数中是硬编码的。我们应该对此进行清�
         ...
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-[Listing [scene-cornell-al]: <kbd>[main.cc]</kbd> 使用铝材料的Cornell盒子场景]
+[Listing [scene-cornell-al]: <kbd>[main.cc]</kbd> 使用铝材料的康奈尔盒场景]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    fn main() {
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        let aluminum: Rc<dyn Material> = Rc::new(Metal::new(Color::new(0.8, 0.85, 0.88), 0.0));
+        let box1 = make_box(
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(165.0, 330.0, 165.0),
+            Rc::clone(&aluminum),
+        );
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        let box1 = Rc::new(RotateY::new(box1, 15.0));
+        let box1 = Rc::new(Translate::new(box1, vec3::Vec3::new(265.0, 0.0, 295.0)));
+        world.add(box1);
+
+        let box2 = make_box(
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(165.0, 165.0, 165.0),
+            Rc::clone(&white)
+        );
+        let box2 = Rc::new(RotateY::new(box2, -18.0));
+        let box2 = Rc::new(Translate::new(box2, vec3::Vec3::new(130.0, 0.0, 65.0)));
+        world.add(box2);
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 <div class='together'>
 结果图像在天花板上有嘈杂的反射，因为朝向盒子的方向没有更密集的采样。
 
-  ![<span class='num'>图像 12：</span>带有任意PDF函数的Cornell盒子](../images/img-3.12-arbitrary-pdf.jpg class='pixel')
+    ![<span class='num'>图像 12：</span>带有任意PDF函数的康奈尔盒](../images/img-3.12-arbitrary-pdf.jpg class='pixel')
 
 </div>
 
