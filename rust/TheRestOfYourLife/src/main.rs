@@ -26,7 +26,7 @@ use hittable_list::HittableList;
 use camera::Camera;
 use material::{
   Material,
-  Metal,
+  Dielectric,
   Lambertian,
   DiffuseLight,
 };
@@ -38,6 +38,7 @@ use hittable::{
   Translate,
   RotateY,
 };
+use sphere::Sphere;
 
 fn cornell_box() {
   let mut world = HittableList::default();
@@ -96,24 +97,23 @@ fn cornell_box() {
     )
   ));
 
-  let aluminum: Rc<dyn Material> = Rc::new(Metal::new(Color::new(0.8, 0.85, 0.88), 0.0));
   let box1 = make_box(
     Point3::new(0.0, 0.0, 0.0),
     Vec3::new(165.0, 330.0, 165.0),
-    Rc::clone(&aluminum),
+    Rc::clone(&white),
   );
   let box1 = Rc::new(RotateY::new(box1, 15.0));
   let box1 = Rc::new(Translate::new(box1, vec3::Vec3::new(265.0, 0.0, 295.0)));
   world.add(box1);
 
-  let box2 = make_box(
-    Point3::new(0.0, 0.0, 0.0),
-    Vec3::new(165.0, 165.0, 165.0),
-    Rc::clone(&white)
-  );
-  let box2 = Rc::new(RotateY::new(box2, -18.0));
-  let box2 = Rc::new(Translate::new(box2, vec3::Vec3::new(130.0, 0.0, 65.0)));
-  world.add(box2);
+  let glass: Rc<dyn Material> = Rc::new(Dielectric::new(1.5));
+  world.add(Rc::new(
+    Sphere::new(
+      Point3::new(190.0, 90.0, 190.0),
+      90.0,
+      Rc::clone(&glass)
+    )
+  ));
 
   // Light Sources.
   let mut lights = HittableList::default();
@@ -125,12 +125,19 @@ fn cornell_box() {
       Rc::clone(&light),
     )
   ));
+  lights.add(Rc::new(
+    Sphere::new(
+      Point3::new(190.0, 90.0, 190.0),
+      90.0,
+      Rc::clone(&glass),
+    )
+  ));
 
   let mut cam = Camera::default();
 
   cam.aspect_ratio = 1.0;
   cam.image_width = 400;
-  cam.samples_per_pixel = 10;
+  cam.samples_per_pixel = 100;
   cam.max_depth = 10;
   cam.background = Color::default();
 

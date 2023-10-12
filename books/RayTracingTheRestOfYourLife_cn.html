@@ -3638,6 +3638,9 @@ Rust实现
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+注意，原文这里存在一个BUG，HittableList需要在这里就实现pdf_value和random方法，否则会渲染不正确。
+具体实现可以直接翻页到文末的HittableList修改部分。
+
 ---
 
 <div class='together'>
@@ -4901,6 +4904,57 @@ Rust实现
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [sphere-pdf]: <kbd>[sphere.h]</kbd> 带有概率密度函数的球体]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Sphere {
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn random_to_sphere(radius: f64, distance_squared: f64) -> Vec3 {
+            let r1 = rtweekend::random_double();
+            let r2 = rtweekend::random_double();
+            let z = 1.0 + r2 * ((1.0 - radius * radius / distance_squared).sqrt() - 1.0);
+
+            let phi = 2.0 * rtweekend::PI * r1;
+            let x = phi.cos() * (1.0 - z * z).sqrt();
+            let y = phi.sin() * (1.0 - z * z).sqrt();
+
+            Vec3::new(x, y, z)
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+
+    impl Hittable for Sphere {
+        ...
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn pdf_value(&self, origin: Point3, direction: Vec3) -> f64 {
+            // 这个方法只适用于静止的球体。
+
+            let mut rec = HitRecord::default();
+            if !self.hit(&Ray::new(origin, direction), &Interval::new(0.001, rtweekend::INFINITY), &mut rec) {
+                return 0.0;
+            }
+
+            let cos_theta_max = (1.0 - self.radius * self.radius / (self.center1 - origin).length_squared()).sqrt();
+            let solid_angle = 2.0 * rtweekend::PI * (1.0 - cos_theta_max);
+
+            1.0 / solid_angle
+        }
+
+        fn random(&self, origin: Point3) -> Vec3 {
+            let direction = self.center1 - origin;
+            let distance_squared = direction.length_squared();
+            let uvw = Onb::new_from_w(direction);
+            uvw.local_v(Self::random_to_sphere(self.radius, distance_squared))
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 <div class='together'>
 我们首先尝试对球体进行采样，而不是光源：
 
@@ -4933,6 +4987,39 @@ Rust实现
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [sampling-sphere]: <kbd>[main.cc]</kbd> 仅对球体进行采样]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    fn main() {
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        let box1 = make_box(
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(165.0, 330.0, 165.0),
+            Rc::clone(&white),
+        );
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        let box1 = Rc::new(RotateY::new(box1, 15.0));
+        let box1 = Rc::new(Translate::new(box1, vec3::Vec3::new(265.0, 0.0, 295.0)));
+        world.add(box1);
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        let glass: Rc<dyn Material> = Rc::new(Dielectric::new(1.5));
+        world.add(Rc::new(
+            Sphere::new(
+                Point3::new(190.0, 90.0, 190.0),
+                90.0,
+                Rc::clone(&glass)
+            )
+        ));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -4979,6 +5066,37 @@ Rust实现
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [density-mixture]: <kbd>[hittable_list.h]</kbd> 创建密度的混合]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Hittable for HittableList {
+        ...
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        fn pdf_value(&self, origin: Point3, direction: Vec3) -> f64 {
+            let weight = 1.0 / self.objects.len() as f64;
+            let mut sum = 0.0;
+
+            for object in self.objects.iter() {
+                sum += weight * object.pdf_value(origin, direction);
+            }
+
+            sum
+        }
+
+        fn random(&self, origin: Point3) -> Vec3 {
+            let int_size = self.objects.len() as i32;
+            self.objects[rtweekend::random_int(0, int_size - 1) as usize].random(origin)
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+注意：原文中这里存在BUG，HittableList的pdf_value和random应该在Hittable定义好这两个函数后马上实现，
+否则会导致对lights的所有采样失效。但为了保持和原文一致，这里仍然放到了最后。
+
+---
+
 <div class='together'>
 我们从`main()`函数中组装一个列表传递给`render()`：
 
@@ -4998,6 +5116,39 @@ Rust实现
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [scene-density-mixture]: <kbd>[main.cc]</kbd> 更新场景]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    fn main() {
+        ...
+
+        // Light Sources.
+        let mut lights = HittableList::default();
+        lights.add(Rc::new(
+            Quad::new(
+                Point3::new(343.0, 554.0, 332.0),
+                vec3::Vec3::new(-130.0, 0.0, 0.0),
+                vec3::Vec3::new(0.0, 0.0, -105.0),
+                Rc::clone(&light),
+            )
+        ));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+        lights.add(Rc::new(
+            Sphere::new(
+                Point3::new(190.0, 90.0, 190.0),
+                90.0,
+                Rc::clone(&glass),
+            )
+        ));
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+        ...
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
@@ -5054,6 +5205,45 @@ Rust实现
     }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [write-color-nan]: <kbd>[color.h]</kbd> 可处理NaN的write_color函数]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Color {
+        pub fn write_color(&self, out: &mut dyn Write, samples_per_pixel: usize) -> std::io::Result<()> {
+            let r = self.x();
+            let g = self.y();
+            let b = self.z();
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+            // Replace NaN components with zero.
+            let r = if r.is_nan() { 0.0 } else { r };
+            let g = if g.is_nan() { 0.0 } else { g };
+            let b = if b.is_nan() { 0.0 } else { b };
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+            // Divide the color by the number of samples.
+            let scale = 1.0 / samples_per_pixel as f64;
+            let r = scale * r;
+            let g = scale * g;
+            let b = scale * b;
+
+            // Apply the linear to gamma transform.
+            let r = linear_to_gamma(r);
+            let g = linear_to_gamma(g);
+            let b = linear_to_gamma(b);
+
+            // Write the translated [0,255] value of each color component.
+            writeln!(out, "{} {} {}",
+                (256.0 * INTENSITY.clamp(r)) as i32,
+                (256.0 * INTENSITY.clamp(g)) as i32,
+                (256.0 * INTENSITY.clamp(b)) as i32)
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
 
 </div>
 
