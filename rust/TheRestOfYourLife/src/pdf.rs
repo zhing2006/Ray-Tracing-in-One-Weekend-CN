@@ -1,6 +1,7 @@
 use super::rtweekend;
-use super::vec3::{self, Vec3};
+use super::vec3::{self, Vec3, Point3};
 use super::onb::Onb;
+use super::hittable::Hittable;
 
 pub trait Pdf {
   fn value(&self, direction: Vec3) -> f64;
@@ -39,5 +40,29 @@ impl Pdf for CosinePdf {
 
   fn generate(&self) -> Vec3 {
     self.uvw.local_v(vec3::random_cosine_direction())
+  }
+}
+
+pub struct HittablePdf<'a> {
+  pub objects: &'a dyn Hittable,
+  pub origin: Point3,
+}
+
+impl<'a> HittablePdf<'a> {
+  pub fn new(objects: &'a dyn Hittable, origin: Point3) -> Self {
+    Self {
+      objects,
+      origin,
+    }
+  }
+}
+
+impl Pdf for HittablePdf<'_> {
+  fn value(&self, direction: Vec3) -> f64 {
+    self.objects.pdf_value(self.origin, direction)
+  }
+
+  fn generate(&self) -> Vec3 {
+    self.objects.random(self.origin)
   }
 }

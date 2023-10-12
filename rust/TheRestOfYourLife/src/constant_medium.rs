@@ -105,4 +105,12 @@ impl Hittable for ConstantMedium {
   fn bounding_box(&self) -> &Aabb {
     self.boundary.bounding_box()
   }
+
+  fn pdf_value(&self, _origin: crate::vec3::Point3, _direction: Vec3) -> f64 {
+    0.0
+  }
+
+  fn random(&self, _origin: crate::vec3::Point3) -> Vec3 {
+    Vec3::new(1.0, 0.0, 0.0)
+  }
 }

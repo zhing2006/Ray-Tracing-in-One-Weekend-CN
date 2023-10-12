@@ -67,7 +67,7 @@ fn cornell_box() {
       Point3::new(343.0, 554.0, 332.0),
       vec3::Vec3::new(-130.0, 0.0, 0.0),
       vec3::Vec3::new(0.0, 0.0, -105.0),
-      light
+      Rc::clone(&light)
     )
   ));
   world.add(Rc::new(
@@ -113,11 +113,22 @@ fn cornell_box() {
   let box2 = Rc::new(Translate::new(box2, vec3::Vec3::new(130.0, 0.0, 65.0)));
   world.add(box2);
 
+  // Light Sources.
+  let mut lights = HittableList::default();
+  lights.add(Rc::new(
+    Quad::new(
+      Point3::new(343.0, 554.0, 332.0),
+      vec3::Vec3::new(-130.0, 0.0, 0.0),
+      vec3::Vec3::new(0.0, 0.0, -105.0),
+      Rc::clone(&light),
+    )
+  ));
+
   let mut cam = Camera::default();
 
   cam.aspect_ratio = 1.0;
   cam.image_width = 400;
-  cam.samples_per_pixel = 50;
+  cam.samples_per_pixel = 10;
   cam.max_depth = 10;
   cam.background = Color::default();
 
@@ -128,7 +139,7 @@ fn cornell_box() {
 
   cam.defocus_angle = 0.0;
 
-  cam.render(&world);
+  cam.render(&world, &lights);
 }
 
 fn main() {

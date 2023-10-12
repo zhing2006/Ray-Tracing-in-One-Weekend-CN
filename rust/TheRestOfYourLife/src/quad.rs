@@ -1,5 +1,6 @@
 use std::rc::Rc;
 
+use super::rtweekend;
 use super::vec3::{
   self,
   Vec3,
@@ -24,6 +25,7 @@ pub struct Quad {
   d: f64,
   mat: Rc<dyn Material>,
   bbox: Aabb,
+  area: f64,
 }
 
 impl Quad {
@@ -41,6 +43,7 @@ impl Quad {
       bbox: Aabb::new_with_point(
         &q, &(q + u + v)
       ),
+      area: n.length(),
     }
   }
 
@@ -93,6 +96,23 @@ impl Hittable for Quad {
 
   fn bounding_box(&self) -> &Aabb {
     &self.bbox
+  }
+
+  fn pdf_value(&self, origin: Point3, direction: Vec3) -> f64 {
+    let mut rec = HitRecord::default();
+    if !self.hit(&Ray::new(origin, direction), &Interval::new(0.0001, f64::INFINITY), &mut rec) {
+      return 0.0;
+    }
+
+    let distance_squared = rec.t * rec.t * direction.length_squared();
+    let cosine = (vec3::dot(direction, rec.normal) / direction.length()).abs();
+
+    distance_squared / (cosine * self.area)
+  }
+
+  fn random(&self, origin: Point3) -> Vec3 {
+    let p = self.q + (rtweekend::random_double() * self.u) + (rtweekend::random_double() * self.v);
+    p - origin
   }
 }
 

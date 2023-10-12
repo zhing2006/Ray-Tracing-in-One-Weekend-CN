@@ -3,7 +3,7 @@ use super::vec3::{
   Point3,
 };
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Ray {
   orig: Vec3,
   dir: Vec3,

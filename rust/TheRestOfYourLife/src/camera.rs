@@ -6,7 +6,8 @@ use super::interval::Interval;
 use super::vec3::{self, Point3, Vec3};
 use super::pdf::{
   Pdf,
-  CosinePdf,
+  // CosinePdf,
+  HittablePdf,
 };
 
 pub struct Camera {
@@ -66,7 +67,7 @@ impl Default for Camera {
 }
 
 impl Camera {
-  pub fn render(&mut self, world: &dyn Hittable) {
+  pub fn render(&mut self, world: &dyn Hittable, lights: &dyn Hittable) {
     self.initialize();
 
     println!("P3\n{} {}\n255", self.image_width, self.image_height);
@@ -79,7 +80,7 @@ impl Camera {
         for s_j in 0..self.sqrt_spp {
           for s_i in 0..self.sqrt_spp {
             let r = self.get_ray(i as i32, j as i32, s_i as i32, s_j as i32);
-            pixel_color += self.ray_color(&r, self.max_depth, world);
+            pixel_color += self.ray_color(&r, self.max_depth, world, lights);
           }
         }
         pixel_color.write_color(&mut stdout.lock(), self.samples_per_pixel).unwrap();
@@ -158,7 +159,7 @@ impl Camera {
     self.center + p.x() * self.defocus_disk_u + p.y() * self.defocus_disk_v
   }
 
-  fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable) -> Color {
+  fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable, lights: &dyn Hittable) -> Color {
     let mut rec = HitRecord::default();
 
     // 如果我们超过了光线反弹限制，就不再收集光线。
@@ -180,13 +181,15 @@ impl Camera {
         return color_from_emission;
       }
 
-      let surface_pdf = CosinePdf::new(rec.normal);
-      scattered = Ray::new_with_time(rec.p, surface_pdf.generate(), r.time());
-      pdf = surface_pdf.value(scattered.direction());
+      let light_pdf = HittablePdf::new(lights, rec.p);
+      let scattered = Ray::new_with_time(rec.p, light_pdf.generate(), r.time());
+      let pdf = light_pdf.value(scattered.direction());
+      eprintln!("scattered: {:?}, pdf: {}", scattered, pdf);
 
       let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
 
-      let color_from_scatter = (attenuation * scattering_pdf * self.ray_color(&scattered,  depth - 1, world)) / pdf;
+      let sample_color = self.ray_color(&scattered, depth - 1, world, lights);
+      let color_from_scatter = (attenuation * scattering_pdf * sample_color) / pdf;
 
       color_from_emission + color_from_scatter
     } else {
