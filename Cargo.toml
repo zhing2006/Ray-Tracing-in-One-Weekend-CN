@@ -3,6 +3,7 @@
 members = [
     "rust/InOneWeekend",
     "rust/TheNextWeek",
-    "rust/TheRestOfYourLife"
+    "rust/TheRestOfYourLife",
+    "rust/WithOIDN",
 ]
 resolver = "2"

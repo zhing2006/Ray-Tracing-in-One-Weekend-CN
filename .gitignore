@@ -2,6 +2,7 @@
 
 build/
 /*.ppm
+/*.pfm
 
 /v3/*.ppm
 
