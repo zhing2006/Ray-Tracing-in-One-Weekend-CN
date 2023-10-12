@@ -66,3 +66,29 @@ impl Pdf for HittablePdf<'_> {
     self.objects.random(self.origin)
   }
 }
+
+pub struct MixturePdf<'a> {
+  pub p: [&'a dyn Pdf; 2],
+}
+
+impl<'a> MixturePdf<'a> {
+  pub fn new(p0: &'a dyn Pdf, p1: &'a dyn Pdf) -> Self {
+    Self {
+      p: [p0, p1],
+    }
+  }
+}
+
+impl Pdf for MixturePdf<'_> {
+  fn value(&self, direction: Vec3) -> f64 {
+    0.5 * self.p[0].value(direction) + 0.5 * self.p[1].value(direction)
+  }
+
+  fn generate(&self) -> Vec3 {
+    if rtweekend::random_double_range(0.0, 1.0) < 0.5 {
+      self.p[0].generate()
+    } else {
+      self.p[1].generate()
+    }
+  }
+}

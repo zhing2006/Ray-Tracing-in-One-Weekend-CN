@@ -6,8 +6,9 @@ use super::interval::Interval;
 use super::vec3::{self, Point3, Vec3};
 use super::pdf::{
   Pdf,
-  // CosinePdf,
+  CosinePdf,
   HittablePdf,
+  MixturePdf,
 };
 
 pub struct Camera {
@@ -181,10 +182,12 @@ impl Camera {
         return color_from_emission;
       }
 
-      let light_pdf = HittablePdf::new(lights, rec.p);
-      let scattered = Ray::new_with_time(rec.p, light_pdf.generate(), r.time());
-      let pdf = light_pdf.value(scattered.direction());
-      eprintln!("scattered: {:?}, pdf: {}", scattered, pdf);
+      let p0 = HittablePdf::new(lights, rec.p);
+      let p1 = CosinePdf::new(rec.normal);
+      let mixed_pdf = MixturePdf::new(&p0, &p1);
+
+      let scattered = Ray::new_with_time(rec.p, mixed_pdf.generate(), r.time());
+      let pdf = mixed_pdf.value(scattered.direction());
 
       let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
 

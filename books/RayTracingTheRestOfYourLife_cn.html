@@ -4049,6 +4049,39 @@ Rust实现
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [class-mixturep-df]: <kbd>[pdf.h]</kbd> mixture_pdf类]
 
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    pub struct MixturePdf<'a> {
+        pub p: [&'a dyn Pdf; 2],
+    }
+
+    impl<'a> MixturePdf<'a> {
+        pub fn new(p0: &'a dyn Pdf, p1: &'a dyn Pdf) -> Self {
+            Self {
+                p: [p0, p1],
+            }
+        }
+    }
+
+    impl Pdf for MixturePdf<'_> {
+        fn value(&self, direction: Vec3) -> f64 {
+            0.5 * self.p[0].value(direction) + 0.5 * self.p[1].value(direction)
+        }
+
+        fn generate(&self) -> Vec3 {
+            if rtweekend::random_double_range(0.0, 1.0) < 0.5 {
+                self.p[0].generate()
+            } else {
+                self.p[1].generate()
+            }
+        }
+    }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+---
+
 </div>
 
 <div class='together'>
@@ -4085,6 +4118,49 @@ Rust实现
         }
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 [Listing [ray-color-mixture]: <kbd>[camera.h]</kbd> ray_color函数，使用混合PDF]
+
+---
+Rust实现
+
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+    impl Camera {
+            ...
+
+            fn ray_color(&self, r: &Ray, depth: usize, world: &dyn Hittable, lights: &dyn Hittable) -> Color {
+                ...
+
+                if let Some(mat) = rec.mat.clone() {
+                    let mut scattered = Ray::default();
+                    let mut attenuation = Color::default();
+                    let mut pdf = 0.0;
+                    let color_from_emission = mat.emitted(r, &rec, rec.u, rec.v, rec.p);
+                    if !mat.scatter(r, &rec, &mut attenuation, &mut scattered, &mut pdf) {
+                        return color_from_emission;
+                    }
+
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust highlight
+                    let p0 = HittablePdf::new(lights, rec.p);
+                    let p1 = CosinePdf::new(rec.normal);
+                    let mixed_pdf = MixturePdf::new(&p0, &p1);
+
+                    let scattered = Ray::new_with_time(rec.p, mixed_pdf.generate(), r.time());
+                    let pdf = mixed_pdf.value(scattered.direction());
+        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ rust
+
+                    let scattering_pdf = mat.scattering_pdf(r, &rec, &scattered);
+
+                    let sample_color = self.ray_color(&scattered, depth - 1, world, lights);
+                    let color_from_scatter = (attenuation * scattering_pdf * sample_color) / pdf;
+
+                    color_from_emission + color_from_scatter
+                } else {
+                    Color::default()
+                }
+            }
+        }
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    ---
 
 </div>
 
