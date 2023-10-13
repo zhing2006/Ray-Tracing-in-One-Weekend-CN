@@ -2,8 +2,18 @@
 name = "with_oidn"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+
+[[bin]]
+name = "denoiser"
+path = "src/bin/denoiser.rs"
+test = false
 
 [dependencies]
 rand = "0"
 stb_image = "0.2"
 clap = "4.4"
+pxm = "0"
+
+[build-dependencies]
+"bindgen" = "0"
